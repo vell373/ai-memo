@@ -124,6 +124,7 @@ def migrate_user_data(user_data, user_id, username):
         "user_id": str(user_id),
         "username": username,
         "custom_prompt_x_post": "",
+        "custom_prompt_article": "",
         "status": "free",
         "last_used_date": "",
         "daily_usage_count": 0
@@ -242,8 +243,7 @@ def can_use_feature(user_data, is_premium):
     
     # 同じ日の場合は制限チェック
     if daily_usage_count >= FREE_USER_DAILY_LIMIT:
-        remaining = max(0, FREE_USER_DAILY_LIMIT - daily_usage_count)
-        return False, f"❌ 無料プランの1日利用制限（{FREE_USER_DAILY_LIMIT}回）に達しました。\n残り回数: {remaining}回"
+        return False, f"😅 今日の分の利用回数を使い切っちゃいました！\n無料プランでは1日{FREE_USER_DAILY_LIMIT}回まで利用できます。明日また遊びに来てくださいね！✨"
     
     # 使用回数を増加
     user_data["daily_usage_count"] = daily_usage_count + 1
@@ -494,36 +494,71 @@ async def transcribe_audio(message, channel):
     """音声ファイルを文字起こしする"""
     try:
         
-        # 音声ファイルを検索
+        # 音声・動画ファイルを検索
         AUDIO_EXTS = ('.mp3', '.m4a', '.ogg', '.webm', '.wav')
-        audio_attachment = None
+        VIDEO_EXTS = ('.mp4',)
+        target_attachment = None
+        is_video = False
         
         for attachment in message.attachments:
-            if attachment.filename.lower().endswith(AUDIO_EXTS):
-                audio_attachment = attachment
+            filename_lower = attachment.filename.lower()
+            if filename_lower.endswith(AUDIO_EXTS):
+                target_attachment = attachment
+                is_video = False
+                break
+            elif filename_lower.endswith(VIDEO_EXTS):
+                target_attachment = attachment
+                is_video = True
                 break
         
-        if not audio_attachment:
-            await channel.send("⚠️ 音声ファイルが見つかりません。対応形式: mp3, m4a, ogg, webm, wav")
+        if not target_attachment:
+            await channel.send("⚠️ 音声・動画ファイルが見つかりません。対応形式: mp3, m4a, ogg, webm, wav, mp4")
             return
         
-        # ファイルサイズチェック（25MB制限）
-        if audio_attachment.size > 25 * 1024 * 1024:
-            await channel.send("❌ ファイルサイズが25MBを超えています。")
+        # ファイルサイズチェック（音声：100MB、動画：500MB制限）
+        if is_video:
+            max_size = 500 * 1024 * 1024  # 500MB
+            size_text = "500MB"
+        else:
+            max_size = 100 * 1024 * 1024   # 100MB
+            size_text = "100MB"
+        
+        if target_attachment.size > max_size:
+            await channel.send(f"❌ ファイルサイズが{size_text}を超えています。")
             return
         
-        await channel.send("🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね")
+        if is_video:
+            await channel.send("🎬 動画から音声を抽出して文字起こしを開始するよ〜！ちょっと待っててね")
+        else:
+            await channel.send("🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね")
         
         # 一時ディレクトリ作成
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             
-            # 音声ファイルをダウンロード
-            file_extension = audio_attachment.filename.split('.')[-1]
-            audio_file_path = temp_path / f"audio.{file_extension}"
-            await audio_attachment.save(audio_file_path)
+            # ファイルをダウンロード
+            file_extension = target_attachment.filename.split('.')[-1]
+            original_file_path = temp_path / f"original.{file_extension}"
+            await target_attachment.save(original_file_path)
             
-            logger.info(f"音声ファイルダウンロード完了: {audio_attachment.filename} ({audio_attachment.size} bytes)")
+            logger.info(f"ファイルダウンロード完了: {target_attachment.filename} ({target_attachment.size} bytes)")
+            
+            # 動画の場合は音声を抽出
+            if is_video:
+                try:
+                    logger.info("動画から音声を抽出中...")
+                    video = AudioSegment.from_file(original_file_path)
+                    audio_file_path = temp_path / "extracted_audio.mp3"
+                    video.export(audio_file_path, format="mp3")
+                    logger.info("音声抽出完了")
+                except Exception as e:
+                    logger.error(f"音声抽出エラー: {e}")
+                    await channel.send("❌ 動画から音声の抽出に失敗しました。")
+                    return
+            else:
+                audio_file_path = original_file_path
+            
+            logger.info(f"処理対象ファイル: {audio_file_path}")
             
             # 音声ファイルを読み込み
             try:
@@ -538,9 +573,24 @@ async def transcribe_audio(message, channel):
             audio_length_sec = audio_length_ms / 1000
             logger.info(f"音声長: {audio_length_sec:.2f}秒")
             
-            # 15分（900秒）単位で分割
-            split_count = max(1, int(audio_length_ms // (900 * 1000)))
-            logger.info(f"{split_count}分割で処理します")
+            # ファイルサイズに基づいて分割数を計算
+            # 25MB制限を考慮して安全に20MBを目標とする
+            target_size_mb = 20
+            
+            # 動画の場合は抽出されたMP3のサイズを使用、音声の場合は元ファイルサイズを使用
+            if is_video:
+                actual_size_mb = audio_file_path.stat().st_size / (1024 * 1024)
+                logger.info(f"動画から抽出されたMP3サイズ: {actual_size_mb:.1f}MB")
+            else:
+                actual_size_mb = target_attachment.size / (1024 * 1024)
+                logger.info(f"音声ファイルサイズ: {actual_size_mb:.1f}MB")
+            
+            time_based_split_count = max(1, int(audio_length_ms // (900 * 1000)))  # 15分基準
+            size_based_split_count = max(1, int(actual_size_mb / target_size_mb))  # 実際のサイズ基準
+            
+            # より大きい分割数を採用（安全のため）
+            split_count = max(time_based_split_count, size_based_split_count)
+            logger.info(f"時間基準: {time_based_split_count}分割, サイズ基準: {size_based_split_count}分割 → {split_count}分割で処理します")
             
             # 音声ファイルを分割
             parts = []
@@ -552,8 +602,11 @@ async def transcribe_audio(message, channel):
                 part_audio = audio[start_time:end_time]
                 part_file_path = temp_path / f"part_{i}.mp3"
                 part_audio.export(part_file_path, format="mp3")
+                
+                # 分割ファイルのサイズをチェック
+                part_size_mb = part_file_path.stat().st_size / (1024 * 1024)
                 parts.append(part_file_path)
-                logger.info(f"分割ファイル作成: part_{i}.mp3 ({start_time}ms～{end_time}ms)")
+                logger.info(f"分割ファイル作成: part_{i}.mp3 ({start_time}ms～{end_time}ms, {part_size_mb:.1f}MB)")
             
             # Whisperで各分割ファイルを文字起こし
             logger.info("Whisperによる文字起こし開始")
@@ -574,12 +627,15 @@ async def transcribe_audio(message, channel):
             logger.info(f"文字起こし完了: {len(full_transcription)}文字")
             
             # 文字起こし結果をテキストファイルとして保存
-            original_name = os.path.splitext(audio_attachment.filename)[0]
+            original_name = os.path.splitext(target_attachment.filename)[0]
             transcript_filename = f"{original_name}_transcript.txt"
             transcript_path = temp_path / transcript_filename
             
             with open(transcript_path, 'w', encoding='utf-8') as f:
-                f.write(f"音声ファイル: {audio_attachment.filename}\n")
+                if is_video:
+                    f.write(f"動画ファイル: {target_attachment.filename}\n")
+                else:
+                    f.write(f"音声ファイル: {target_attachment.filename}\n")
                 f.write(f"音声長: {audio_length_sec:.2f}秒\n")
                 f.write(f"処理日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("-" * 50 + "\n\n")
@@ -598,8 +654,7 @@ async def transcribe_audio(message, channel):
                 await channel.send("⚠️ 文字起こし結果が空でした。")
             
             await channel.send("-" * 30)
-            await channel.send("📄 テキストファイルもダウンロードできるよ〜！")
-            await channel.send(file=discord.File(transcript_path))
+            await channel.send("📄 文字起こし結果のテキストファイルです！", file=discord.File(transcript_path))
             
     except Exception as e:
         logger.error(f"音声文字起こしエラー: {e}")
@@ -678,6 +733,11 @@ async def help_command(interaction: discord.Interaction):
         value="X投稿用のカスタムプロンプトを設定（空白入力で無効化）", 
         inline=False
     )
+    embed.add_field(
+        name="/set_custom_prompt_article", 
+        value="記事作成用のカスタムプロンプトを設定（空白入力で無効化）", 
+        inline=False
+    )
     
     await interaction.response.send_message(embed=embed)
 
@@ -739,6 +799,65 @@ async def set_custom_prompt_x_post_command(interaction: discord.Interaction):
     modal = CustomPromptModal()
     await interaction.response.send_modal(modal)
 
+# 記事作成用カスタムプロンプト設定のModalクラス
+class CustomArticlePromptModal(discord.ui.Modal, title='記事作成用カスタムプロンプト設定'):
+    def __init__(self):
+        super().__init__()
+
+    # テキスト入力エリア（複数行対応）
+    prompt_input = discord.ui.TextInput(
+        label='カスタムプロンプト',
+        placeholder='記事作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空白のみを入力するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
+        style=discord.TextStyle.paragraph,  # 複数行入力
+        max_length=2000,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            prompt = self.prompt_input.value.strip()  # 前後の空白を削除
+            
+            # ユーザーデータを読み込み（存在しない場合は新規作成）
+            user_id = interaction.user.id
+            user_data = load_user_data(user_id)
+            if user_data is None:
+                user_data = {
+                    "custom_prompt_x_post": "",
+                    "custom_prompt_article": "",
+                    "status": "free",
+                    "last_used_date": "",
+                    "daily_usage_count": 0
+                }
+            
+            # 記事用カスタムプロンプトを更新
+            user_data["custom_prompt_article"] = prompt
+            
+            # ユーザーデータを保存
+            save_user_data(user_id, user_data)
+            
+            # 設定内容に応じてメッセージを変更
+            if prompt:
+                print(f"ユーザー {interaction.user.name} ({user_id}) が記事用カスタムプロンプトを設定しました")
+                print(f"プロンプト内容: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+                await interaction.response.send_message("✅ 記事作成用カスタムプロンプトを設定しました！", ephemeral=True)
+            else:
+                print(f"ユーザー {interaction.user.name} ({user_id}) が記事用カスタムプロンプトを無効化しました")
+                await interaction.response.send_message("✅ 記事作成用カスタムプロンプトを無効化しました。デフォルトプロンプトを使用します。", ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"記事用カスタムプロンプト設定エラー: {e}")
+            await interaction.response.send_message("❌ エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal エラー: {error}")
+        await interaction.response.send_message("❌ エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
+
+@bot.tree.command(name="set_custom_prompt_article", description="記事作成用のカスタムプロンプトを設定します")
+async def set_custom_prompt_article_command(interaction: discord.Interaction):
+    """記事用カスタムプロンプト設定コマンド"""
+    modal = CustomArticlePromptModal()
+    await interaction.response.send_modal(modal)
+
 @bot.tree.command(name="activate", description="このチャンネルでBotを有効化します")
 async def activate_command(interaction: discord.Interaction):
     """アクティベートコマンド"""
@@ -766,7 +885,45 @@ async def activate_command(interaction: discord.Interaction):
     if channel_id not in server_data['active_channel_ids']:
         server_data['active_channel_ids'].append(channel_id)
         save_server_data(server_id, server_data)
-        await interaction.response.send_message(f"✅ このチャンネル（{interaction.channel.name}）でBotを有効化しました。")
+        
+        # 使い方ガイドメッセージを作成
+        guide_message = (
+            f"✅ このチャンネル（{interaction.channel.name}）でBotを有効化しました！\n\n"
+            "**📖 使い方**\n"
+            "メッセージに以下のリアクションを付けると、それぞれの機能が動作します：\n\n"
+            "👍 **X投稿生成** - メッセージをX（旧Twitter）投稿用に最適化\n"
+            "🎤 **音声文字起こし** - 音声ファイルをテキストに変換\n"
+            "❓ **AI解説** - メッセージ内容を詳しく解説\n"
+            "❤️ **褒めメッセージ** - 熱烈な応援メッセージと画像を生成\n"
+            "✏️ **メモ作成** - Obsidian用のMarkdownメモを自動生成\n"
+            "📝 **記事作成** - 記事を作成（カスタムプロンプト対応）\n\n"
+            "👇試しに下のリアクションを押してみて👇"
+        )
+        
+        await interaction.response.send_message(guide_message)
+        
+        # 送信したメッセージを取得してリアクションを追加
+        message = await interaction.original_response()
+        reactions = ['👍', '❓', '❤️', '✏️', '📝']
+        for emoji in reactions:
+            await message.add_reaction(emoji)
+            await asyncio.sleep(0.5)  # リアクション追加の間隔を空ける
+        
+        # サンプル音声ファイルを送信
+        sample_audio_path = script_dir / "audio" / "sample_voice.mp3"
+        if sample_audio_path.exists():
+            try:
+                audio_message = await interaction.followup.send(
+                    "🎵 試しに音声文字起こし機能を使ってみてください！",
+                    file=discord.File(sample_audio_path)
+                )
+                # サンプル音声にマイクリアクションを追加
+                await audio_message.add_reaction('🎤')
+                logger.info("サンプル音声ファイル送信完了")
+            except Exception as e:
+                logger.error(f"サンプル音声ファイル送信エラー: {e}")
+        else:
+            logger.warning(f"サンプル音声ファイルが見つかりません: {sample_audio_path}")
     else:
         await interaction.response.send_message(f"ℹ️ このチャンネル（{interaction.channel.name}）は既に有効です。")
 
@@ -842,7 +999,7 @@ async def on_raw_reaction_add(payload):
         return
     
     # リアクションの種類をチェック
-    if payload.emoji.name in ['👍', '🎤', '❤️', '❓', '✏️']:
+    if payload.emoji.name in ['👍', '🎤', '❤️', '❓', '✏️', '📝']:
         server_id = str(payload.guild_id)
         channel_id = str(payload.channel_id)
         
@@ -868,6 +1025,7 @@ async def on_raw_reaction_add(payload):
                     "user_id": str(user.id),
                     "username": user.name,
                     "custom_prompt_x_post": "",
+                    "custom_prompt_article": "",
                     "status": "free",
                     "last_used_date": "",
                     "daily_usage_count": 0
@@ -1010,13 +1168,13 @@ async def on_raw_reaction_add(payload):
                 else:
                     await channel.send("⚠️ メッセージに内容がありません。")
             
-            # 🎤 マイク：音声文字起こし
+            # 🎤 マイク：音声・動画文字起こし
             elif payload.emoji.name == '🎤':
-                # 音声ファイルがあるかチェック
+                # 音声・動画ファイルがあるかチェック
                 if message.attachments:
                     await transcribe_audio(message, channel)
                 else:
-                    await channel.send("⚠️ 音声ファイルが添付されたメッセージにリアクションしてください。")
+                    await channel.send("⚠️ 音声・動画ファイルが添付されたメッセージにリアクションしてください。")
             
             # ❤️ ハート：絶賛モード
             elif payload.emoji.name == '❤️':
@@ -1104,7 +1262,7 @@ async def on_raw_reaction_add(payload):
                             # 3. 画像を送信
                             if image_path and os.path.exists(image_path):
                                 try:
-                                    await channel.send(file=discord.File(image_path))
+                                    await channel.send("🎉 褒め画像をお作りしました！", file=discord.File(image_path))
                                     logger.info("褒め画像送信成功")
                                     # 一時ファイルを削除
                                     try:
@@ -1333,7 +1491,7 @@ async def on_raw_reaction_add(payload):
                                     file_data = f.read()
                                 
                                 file_obj = io.BytesIO(file_data)
-                                await channel.send("📎 メモファイル:", file=discord.File(file_obj, filename=filename))
+                                await channel.send("📝 メモファイルを作成しました！", file=discord.File(file_obj, filename=filename))
                                 
                                 # Discord投稿後、attachmentsフォルダの中身を削除
                                 for attachment_file in attachments_dir.iterdir():
@@ -1359,6 +1517,214 @@ async def on_raw_reaction_add(payload):
                         await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
                     await channel.send("⚠️ メッセージに内容がありません。")
+            
+            # 📝 メモ：記事作成
+            elif payload.emoji.name == '📝':
+                # メッセージ内容または添付ファイル、Embedからテキストを取得
+                input_text = message.content
+                
+                # Embedがある場合は内容を抽出
+                embed_content = extract_embed_content(message)
+                if embed_content:
+                    if input_text:
+                        input_text += f"\n\n【Embed内容】\n{embed_content}"
+                    else:
+                        input_text = embed_content
+                    logger.info("Embed内容を追加")
+                
+                # 添付ファイルがある場合、テキストファイルの内容を読み取り
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_content = await read_text_attachment(attachment)
+                        if file_content:
+                            if input_text:
+                                input_text += f"\n\n【ファイル: {attachment.filename}】\n{file_content}"
+                            else:
+                                input_text = f"【ファイル: {attachment.filename}】\n{file_content}"
+                            logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
+                
+                if input_text:
+                    # 処理開始メッセージ
+                    await channel.send("📝 記事を作成するよ〜！ちょっと待っててね")
+                    
+                    # モデルを選択
+                    model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
+                    
+                    # 記事用プロンプトを読み込み
+                    article_prompt = None
+                    
+                    # 1. ユーザーのカスタムプロンプトをチェック
+                    if user_data and user_data.get('custom_prompt_article'):
+                        article_prompt = user_data['custom_prompt_article']
+                        logger.info(f"ユーザー {user.name} のカスタムプロンプトを使用")
+                    
+                    # 2. カスタムプロンプトがない場合はデフォルトプロンプトファイルを使用
+                    if not article_prompt:
+                        prompt_path = script_dir / "prompt" / "article.txt"
+                        if prompt_path.exists():
+                            with open(prompt_path, 'r', encoding='utf-8') as f:
+                                article_prompt = f.read()
+                            logger.info("デフォルトプロンプトファイルを使用")
+                        else:
+                            article_prompt = "あなたは優秀なライターです。与えられた内容を元に、構造化された記事を作成してください。"
+                            logger.info("フォールバックプロンプトを使用")
+                    
+                    # プロンプトにJSON出力指示を追加（既に含まれていない場合）
+                    if '{"content":' not in article_prompt:
+                        article_prompt += '\n\n出力はJSON形式で、以下のフォーマットに従ってください：\n{"content": "マークダウン形式の記事全文"}'
+                    
+                    # OpenAI APIで記事を生成（JSONモード）
+                    if client_openai:
+                        try:
+                            response = client_openai.chat.completions.create(
+                                model=model,
+                                messages=[
+                                    {"role": "system", "content": article_prompt},
+                                    {"role": "user", "content": input_text}
+                                ],
+                                max_tokens=3000,
+                                temperature=0.7,
+                                response_format={"type": "json_object"}
+                            )
+                            
+                            # JSONレスポンスをパース
+                            response_content = response.choices[0].message.content
+                            try:
+                                article_json = json.loads(response_content)
+                                content = article_json.get("content", response_content)
+                            except json.JSONDecodeError:
+                                logger.warning(f"JSON解析エラー、フォールバックを使用: {response_content}")
+                                content = response_content
+                            
+                            # ファイル名を生成（YYYYMMDD_HHMMSS_article.md）
+                            now = datetime.now()
+                            timestamp = now.strftime("%Y%m%d_%H%M%S")
+                            filename = f"{timestamp}_article.md"
+                            
+                            # attachmentsフォルダにファイルを保存
+                            attachments_dir = script_dir / "attachments"
+                            attachments_dir.mkdir(exist_ok=True)
+                            file_path = attachments_dir / filename
+                            
+                            # UTF-8でファイル保存
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(content)
+                            
+                            logger.info(f"記事ファイル作成: {file_path}")
+                            
+                            try:
+                                # 記事のタイトルを抽出（最初の#行）
+                                lines = content.split('\n')
+                                title = "記事"
+                                for line in lines:
+                                    if line.strip().startswith('# '):
+                                        title = line.strip()[2:].strip()
+                                        break
+                                
+                                # 結果を送信
+                                embed = discord.Embed(
+                                    title="📝 記事を作成しました",
+                                    description=f"**タイトル**: {title}\n**ファイル名**: `{filename}`",
+                                    color=0x00bfa5
+                                )
+                                
+                                # 内容のプレビュー（最初の300文字）
+                                preview = content[:300] + "..." if len(content) > 300 else content
+                                embed.add_field(
+                                    name="📄 内容プレビュー",
+                                    value=f"```markdown\n{preview}\n```",
+                                    inline=False
+                                )
+                                
+                                await channel.send(embed=embed)
+                                
+                                # ファイルをアップロード
+                                with open(file_path, 'rb') as f:
+                                    file_data = f.read()
+                                
+                                file_obj = io.BytesIO(file_data)
+                                await channel.send("📝 記事ファイルです！", file=discord.File(file_obj, filename=filename))
+                                
+                                # Discord投稿後、attachmentsフォルダの中身を削除
+                                for attachment_file in attachments_dir.iterdir():
+                                    if attachment_file.is_file():
+                                        attachment_file.unlink()
+                                        logger.info(f"添付ファイル削除: {attachment_file}")
+                                
+                            except Exception as upload_error:
+                                logger.error(f"ファイル投稿エラー: {upload_error}")
+                                # エラーが発生してもファイルは削除する
+                                try:
+                                    file_path.unlink()
+                                    logger.info(f"エラー後のファイル削除: {file_path}")
+                                except Exception as cleanup_error:
+                                    logger.warning(f"ファイル削除エラー: {cleanup_error}")
+                                raise upload_error
+                            
+                        except Exception as e:
+                            logger.error(f"OpenAI API エラー (記事機能): {e}")
+                            await channel.send("❌ 記事の生成中にエラーが発生しました。")
+                    else:
+                        logger.error("エラー: OpenAI APIキーが設定されていません")
+                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                else:
+                    await channel.send("⚠️ メッセージに内容がありません。")
+
+@bot.event
+async def on_message(message):
+    """メッセージ受信時の処理 - 自動リアクション追加"""
+    # Botのメッセージは無視
+    if message.author.bot:
+        return
+    
+    # チャンネルが有効かチェック
+    server_id = str(message.guild.id) if message.guild else None
+    channel_id = str(message.channel.id)
+    
+    if server_id and is_channel_active(server_id, channel_id):
+        try:
+            # 音声・動画ファイルがあるかチェック
+            has_audio = False
+            has_non_audio = False
+            
+            if message.attachments:
+                AUDIO_EXTS = ('.mp3', '.m4a', '.ogg', '.webm', '.wav')
+                VIDEO_EXTS = ('.mp4',)
+                for attachment in message.attachments:
+                    filename_lower = attachment.filename.lower()
+                    if filename_lower.endswith(AUDIO_EXTS) or filename_lower.endswith(VIDEO_EXTS):
+                        has_audio = True
+                    else:
+                        has_non_audio = True
+            
+            # メッセージ内容があるかチェック
+            has_content = bool(message.content.strip())
+            
+            # 音声ファイルのみの場合はマイクだけ
+            if has_audio and not has_non_audio and not has_content:
+                await message.add_reaction('🎤')
+                await asyncio.sleep(0.3)
+            else:
+                # その他の場合は基本リアクション
+                basic_reactions = ['👍', '❓', '❤️', '✏️', '📝']
+                
+                # リアクションを追加
+                for emoji in basic_reactions:
+                    await message.add_reaction(emoji)
+                    await asyncio.sleep(0.3)  # リアクション追加の間隔
+                
+                # 音声ファイルがある場合はマイクも追加
+                if has_audio:
+                    await message.add_reaction('🎤')
+                    await asyncio.sleep(0.3)
+            
+            logger.info(f"自動リアクション追加完了: {message.channel.name} - {message.author.name}")
+            
+        except Exception as e:
+            logger.error(f"自動リアクション追加エラー: {e}")
+    
+    # コマンドの処理を継続
+    await bot.process_commands(message)
 
 
 if __name__ == "__main__":
