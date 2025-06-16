@@ -1,0 +1,27 @@
+# 環境変数ファイル
+.env
+
+# ログファイル
+log.txt
+
+# ユーザーデータ（プライバシー保護）
+data/user_data/*.json
+
+# サーバーデータ（設定情報）
+data/server_data/*.json
+
+# Pythonキャッシュファイル
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OSファイル
+.DS_Store
+Thumbs.db
+
+# エディタファイル
+.vscode/
+.idea/
+*.swp
+*.swo
