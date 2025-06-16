@@ -7,10 +7,13 @@ venv/
 env/
 
 # 個人用実行スクリプト
-*.bat
-*.sh
+open.bat
 *.lnk
-run.*
+
+# プロジェクトの起動スクリプトは含める
+!ai-keisuke.bat
+!start-en.bat
+!run.sh
 
 # ログファイル
 log.txt
