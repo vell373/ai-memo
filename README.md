@@ -22,7 +22,7 @@ Discord上でAI機能を提供するBotです。リアクションベースの�
 ## 🚀 クイックスタート（Bot招待）
 
 1. **Botをサーバーに招待**
-   - [公式サイト](https://ai-keisuke-bot.github.io/)からBotを招待
+   - [公式サイト](https://ai-keisuke.kei31.com/)からBotを招待
    
 2. **チャンネルを有効化**
    ```
@@ -317,9 +317,9 @@ Discord Botの仕様により、日本語ファイル名は自動的に英語に
 
 ## 🌐 関連リンク
 
-- [公式サイト](https://ai-keisuke-bot.github.io/)
+- [公式サイト](https://ai-keisuke.kei31.com/)
 - [サポートサーバー](https://discord.gg/7b5g3RbjYv)
-- [プライバシーポリシー](https://ai-keisuke-bot.github.io/privacy.html)
+- [プライバシーポリシー](https://ai-keisuke.kei31.com/privacy.html)
 
 ## 📄 ライセンス
 
@@ -327,4 +327,4 @@ Discord Botの仕様により、日本語ファイル名は自動的に英語に
 
 ---
 
-**🚀 今すぐ試す**: [公式サイト](https://ai-keisuke-bot.github.io/)からBotを招待してDiscordサーバーで体験！
+**🚀 今すぐ試す**: [公式サイト](https://ai-keisuke.kei31.com/)からBotを招待してDiscordサーバーで体験！
