@@ -67,13 +67,58 @@ if settings_path.exists():
 else:
     FREE_USER_DAILY_LIMIT = 5  # デフォルト値
 
-# ログ設定
+# カスタムログハンドラー（書き込み時のみファイルを開く）
+class SyncFriendlyFileHandler(logging.Handler):
+    def __init__(self, filename, encoding='utf-8', max_bytes=10*1024*1024):
+        super().__init__()
+        self.filename = filename
+        self.encoding = encoding
+        self.max_bytes = max_bytes
+        
+    def emit(self, record):
+        try:
+            # ファイルサイズチェック（ローテーション）
+            if Path(self.filename).exists() and Path(self.filename).stat().st_size > self.max_bytes:
+                self._rotate_logs()
+            
+            # 書き込み時のみファイルを開く
+            with open(self.filename, 'a', encoding=self.encoding) as f:
+                f.write(self.format(record) + '\n')
+                f.flush()  # 即座に書き込み
+        except Exception:
+            self.handleError(record)
+    
+    def _rotate_logs(self):
+        """ログファイルをローテーション"""
+        try:
+            base_path = Path(self.filename)
+            # 古いバックアップを削除・移動
+            for i in range(4, 0, -1):  # log.txt.4 → log.txt.5
+                old_file = base_path.with_suffix(f'.txt.{i}')
+                new_file = base_path.with_suffix(f'.txt.{i+1}')
+                if old_file.exists():
+                    if new_file.exists():
+                        new_file.unlink()
+                    old_file.rename(new_file)
+            
+            # 現在のログファイルをlog.txt.1に移動
+            if base_path.exists():
+                backup_file = base_path.with_suffix('.txt.1')
+                if backup_file.exists():
+                    backup_file.unlink()
+                base_path.rename(backup_file)
+        except Exception as e:
+            print(f"ログローテーションエラー: {e}")
+
+# ログ設定（同期フレンドリー）
 log_file = script_dir / "log.txt"
+sync_handler = SyncFriendlyFileHandler(log_file)
+sync_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(log_file, encoding='utf-8'),
+        sync_handler,
         logging.StreamHandler()  # コンソールにも出力
     ]
 )
