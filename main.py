@@ -16,10 +16,27 @@ from PIL import Image, ImageDraw, ImageFont
 import random
 import re
 import io
+import aiohttp
 
 # スクリプトのディレクトリを基準に.envファイルを読み込む
 script_dir = Path(__file__).parent
 env_path = script_dir / '.env'
+
+# 必要なディレクトリを自動作成
+def create_required_directories():
+    """起動時に必要なディレクトリを自動作成"""
+    required_dirs = [
+        script_dir / "data" / "server_data",
+        script_dir / "data" / "user_data", 
+        script_dir / "attachments"
+    ]
+    
+    for dir_path in required_dirs:
+        dir_path.mkdir(parents=True, exist_ok=True)
+        print(f"📁 ディレクトリ確認: {dir_path}")
+
+# 必要なディレクトリを作成
+create_required_directories()
 
 # 既存の環境変数をクリアしてから.envファイルを読み込む
 if 'OPENAI_API_KEY' in os.environ:
@@ -152,11 +169,22 @@ def save_user_data(user_id, data):
 def is_premium_user(user_id):
     """ユーザーがプレミアムかどうかを判定"""
     try:
-        # コミュニティサーバーからユーザー情報を取得
+        # サーバーオーナーの特別判定
         community_guild = bot.get_guild(int(settings.get("community_server_id")))
         if not community_guild:
             logger.warning(f"Community server not found: {settings.get('community_server_id')}")
             return False
+        
+        # オーナーチェック（Discord APIベース）
+        if int(user_id) == community_guild.owner_id:
+            logger.info(f"User {user_id} is server owner - granting premium access")
+            return True
+        
+        # オーナーチェック（設定ファイルベース）
+        owner_user_id = settings.get("owner_user_id")
+        if owner_user_id and str(user_id) == str(owner_user_id):
+            logger.info(f"User {user_id} is configured owner - granting premium access")
+            return True
         
         logger.info(f"Debug: Checking user {user_id} in guild {community_guild.name}")
         
@@ -342,6 +370,87 @@ def make_praise_image(praise_text):
         logger.error(f"画像生成エラー: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return None
+
+def extract_embed_content(message):
+    """メッセージのEmbedから内容を抽出する"""
+    try:
+        if not message.embeds:
+            return None
+        
+        embed_content = ""
+        
+        for embed in message.embeds:
+            # タイトルを追加
+            if embed.title:
+                embed_content += f"# {embed.title}\n\n"
+            
+            # 説明文を追加
+            if embed.description:
+                embed_content += f"{embed.description}\n\n"
+            
+            # フィールドを追加
+            for field in embed.fields:
+                if field.name and field.value:
+                    # リンク形式の場合は実際のテキストを抽出
+                    field_value = field.value
+                    # [テキスト](URL) 形式からテキスト部分を抽出
+                    import re
+                    link_match = re.search(r'\[([^\]]+)\]\([^)]+\)', field_value)
+                    if link_match:
+                        field_value = link_match.group(1)
+                    
+                    embed_content += f"**{field.name}**: {field_value}\n\n"
+        
+        if embed_content.strip():
+            logger.info(f"Embed内容を抽出: {len(embed_content)}文字")
+            return embed_content.strip()
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Embed内容抽出エラー: {e}")
+        return None
+
+async def read_text_attachment(attachment):
+    """添付ファイルからテキスト内容を読み取る"""
+    try:
+        # テキストファイルの拡張子をチェック
+        text_extensions = ['.txt', '.md', '.json', '.csv', '.log', '.py', '.js', '.html', '.css', '.xml']
+        file_extension = Path(attachment.filename).suffix.lower()
+        
+        if file_extension not in text_extensions:
+            return None
+        
+        # ファイルサイズをチェック（1MB以下）
+        if attachment.size > 1024 * 1024:
+            logger.warning(f"ファイルサイズが大きすぎます: {attachment.filename} ({attachment.size} bytes)")
+            return None
+        
+        # ファイルをダウンロードして内容を読み取り
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as response:
+                if response.status == 200:
+                    content_bytes = await response.read()
+                    # UTF-8で読み取り、失敗したら他のエンコーディングを試す
+                    try:
+                        content = content_bytes.decode('utf-8')
+                        logger.info(f"テキストファイル読み取り成功: {attachment.filename} ({len(content)}文字)")
+                        return content
+                    except UnicodeDecodeError:
+                        try:
+                            content = content_bytes.decode('shift_jis')
+                            logger.info(f"テキストファイル読み取り成功(Shift-JIS): {attachment.filename} ({len(content)}文字)")
+                            return content
+                        except UnicodeDecodeError:
+                            logger.warning(f"テキストファイルのエンコーディングを判定できませんでした: {attachment.filename}")
+                            return None
+                else:
+                    logger.warning(f"ファイルダウンロードに失敗: {attachment.filename} (status: {response.status})")
+                    return None
+                    
+    except Exception as e:
+        logger.error(f"テキストファイル読み取りエラー: {attachment.filename}, {e}")
         return None
 
 def shorten_url(long_url):
@@ -791,7 +900,30 @@ async def on_raw_reaction_add(payload):
             
             # 👍 サムズアップ：X投稿要約
             if payload.emoji.name == '👍':
-                if message.content:
+                # メッセージ内容または添付ファイル、Embedからテキストを取得
+                input_text = message.content
+                
+                # Embedがある場合は内容を抽出
+                embed_content = extract_embed_content(message)
+                if embed_content:
+                    if input_text:
+                        input_text += f"\n\n【Embed内容】\n{embed_content}"
+                    else:
+                        input_text = embed_content
+                    logger.info("Embed内容を追加")
+                
+                # 添付ファイルがある場合、テキストファイルの内容を読み取り
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_content = await read_text_attachment(attachment)
+                        if file_content:
+                            if input_text:
+                                input_text += f"\n\n【ファイル: {attachment.filename}】\n{file_content}"
+                            else:
+                                input_text = f"【ファイル: {attachment.filename}】\n{file_content}"
+                            logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
+                
+                if input_text:
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
@@ -827,7 +959,7 @@ async def on_raw_reaction_add(payload):
                                 model=model,
                                 messages=[
                                     {"role": "system", "content": x_prompt},
-                                    {"role": "user", "content": message.content}
+                                    {"role": "user", "content": input_text}
                                 ],
                                 max_tokens=1000,
                                 temperature=0.9,
@@ -888,7 +1020,30 @@ async def on_raw_reaction_add(payload):
             
             # ❤️ ハート：絶賛モード
             elif payload.emoji.name == '❤️':
-                if message.content:
+                # メッセージ内容または添付ファイル、Embedからテキストを取得
+                input_text = message.content
+                
+                # Embedがある場合は内容を抽出
+                embed_content = extract_embed_content(message)
+                if embed_content:
+                    if input_text:
+                        input_text += f"\n\n【Embed内容】\n{embed_content}"
+                    else:
+                        input_text = embed_content
+                    logger.info("Embed内容を追加")
+                
+                # 添付ファイルがある場合、テキストファイルの内容を読み取り
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_content = await read_text_attachment(attachment)
+                        if file_content:
+                            if input_text:
+                                input_text += f"\n\n【ファイル: {attachment.filename}】\n{file_content}"
+                            else:
+                                input_text = f"【ファイル: {attachment.filename}】\n{file_content}"
+                            logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
+                
+                if input_text:
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
@@ -911,7 +1066,7 @@ async def on_raw_reaction_add(payload):
                                 model=model,
                                 messages=[
                                     {"role": "system", "content": praise_prompt},
-                                    {"role": "user", "content": message.content}
+                                    {"role": "user", "content": input_text}
                                 ],
                                 max_tokens=1500,
                                 temperature=0.9,
@@ -975,7 +1130,30 @@ async def on_raw_reaction_add(payload):
             
             # ❓ 疑問符：AI説明
             elif payload.emoji.name == '❓':
-                if message.content:
+                # メッセージ内容または添付ファイル、Embedからテキストを取得
+                input_text = message.content
+                
+                # Embedがある場合は内容を抽出
+                embed_content = extract_embed_content(message)
+                if embed_content:
+                    if input_text:
+                        input_text += f"\n\n【Embed内容】\n{embed_content}"
+                    else:
+                        input_text = embed_content
+                    logger.info("Embed内容を追加")
+                
+                # 添付ファイルがある場合、テキストファイルの内容を読み取り
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_content = await read_text_attachment(attachment)
+                        if file_content:
+                            if input_text:
+                                input_text += f"\n\n【ファイル: {attachment.filename}】\n{file_content}"
+                            else:
+                                input_text = f"【ファイル: {attachment.filename}】\n{file_content}"
+                            logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
+                
+                if input_text:
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
@@ -1000,7 +1178,7 @@ async def on_raw_reaction_add(payload):
                                 model=model,
                                 messages=[
                                     {"role": "system", "content": explain_prompt},
-                                    {"role": "user", "content": message.content}
+                                    {"role": "user", "content": input_text}
                                 ],
                                 max_tokens=2000,
                                 temperature=0.7
@@ -1041,7 +1219,30 @@ async def on_raw_reaction_add(payload):
             
             # ✏️ 鉛筆：Obsidianメモ作成
             elif payload.emoji.name == '✏️':
-                if message.content:
+                # メッセージ内容または添付ファイル、Embedからテキストを取得
+                input_text = message.content
+                
+                # Embedがある場合は内容を抽出
+                embed_content = extract_embed_content(message)
+                if embed_content:
+                    if input_text:
+                        input_text += f"\n\n【Embed内容】\n{embed_content}"
+                    else:
+                        input_text = embed_content
+                    logger.info("Embed内容を追加")
+                
+                # 添付ファイルがある場合、テキストファイルの内容を読み取り
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_content = await read_text_attachment(attachment)
+                        if file_content:
+                            if input_text:
+                                input_text += f"\n\n【ファイル: {attachment.filename}】\n{file_content}"
+                            else:
+                                input_text = f"【ファイル: {attachment.filename}】\n{file_content}"
+                            logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
+                
+                if input_text:
                     # 処理開始メッセージ
                     await channel.send("📝 メモを作るよ〜！ちょっと待っててね")
                     
@@ -1066,7 +1267,7 @@ async def on_raw_reaction_add(payload):
                                 model=model,
                                 messages=[
                                     {"role": "system", "content": memo_prompt},
-                                    {"role": "user", "content": message.content}
+                                    {"role": "user", "content": input_text}
                                 ],
                                 max_tokens=2000,
                                 temperature=0.3,
@@ -1079,12 +1280,12 @@ async def on_raw_reaction_add(payload):
                                 memo_json = json.loads(response_content)
                                 japanese_title = memo_json.get("japanese_title", "無題のメモ")
                                 english_title = memo_json.get("english_title", "untitled_memo")
-                                content = memo_json.get("content", message.content)
+                                content = memo_json.get("content", input_text)
                             except json.JSONDecodeError:
                                 logger.warning(f"JSON解析エラー、フォールバックを使用: {response_content}")
                                 japanese_title = "無題のメモ"
                                 english_title = "untitled_memo"
-                                content = message.content
+                                content = input_text
                             
                             # ファイル名を生成（YYYYMMDD_HHMMSS_english_title.md）
                             now = datetime.now()
