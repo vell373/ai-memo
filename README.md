@@ -4,11 +4,12 @@ Discord上でAI機能を提供するBotです。リアクションベースの�
 
 ## ✨ 機能概要
 
-- 👍 **X投稿生成**: メッセージをX（旧Twitter）投稿用に最適化
+- 👍 **X投稿生成**: メッセージやファイル内容をX（旧Twitter）投稿用に最適化
 - 🎤 **音声文字起こし**: 音声ファイルをテキストに変換
 - ❓ **AI解説**: 投稿内容について詳しく解説
 - ❤️ **褒めメッセージ**: 投稿を熱烈に褒める画像付きメッセージ
 - ✏️ **メモ作成**: 投稿をObsidian用Markdownメモとして保存
+- 📎 **ファイル処理**: テキストファイル(.txt, .md等)やEmbed内容も処理対象
 
 ## 🎯 プラン比較
 
@@ -31,6 +32,18 @@ Discord上でAI機能を提供するBotです。リアクションベースの�
    
 3. **機能を使用**
    - メッセージにリアクション（👍🎤❓❤️✏️）を付けるだけ！
+
+## 🔄 使用例ワークフロー
+
+### 音声からメモ作成まで
+1. **音声ファイルをアップロード** → 🎤リアクション → **文字起こしテキストファイル生成**
+2. **テキストファイル** → 👍リアクション → **X投稿用Embed表示**
+3. **X投稿Embed** → ✏️リアクション → **Obsidianメモ作成**
+
+### テキストファイル処理
+- **対応形式**: `.txt`, `.md`, `.json`, `.csv`, `.log`, `.py`, `.js`, `.html`, `.css`, `.xml`
+- **処理方法**: ファイル添付されたメッセージにリアクションするだけ
+- **Embed処理**: Bot生成のEmbedメッセージにもリアクション可能
 
 ## 🛠️ 開発者向けセットアップ
 
@@ -119,9 +132,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 {
   "community_server_id": "YOUR_COMMUNITY_SERVER_ID",
   "premium_role_id": "YOUR_PREMIUM_ROLE_ID", 
-  "free_user_daily_limit": 5
+  "free_user_daily_limit": 5,
+  "owner_user_id": "YOUR_USER_ID"
 }
 ```
+
+**プレミアム判定方式**:
+1. サーバーオーナー自動判定（Discord API）
+2. 設定ファイルによるオーナー指定（`owner_user_id`）
+3. プレミアムロール保持者判定
 
 ## 📂 ディレクトリ構造
 
@@ -132,9 +151,16 @@ ai-keisuke/
 ├── settings.json           # Bot設定
 ├── requirements.txt        # 依存パッケージ
 ├── log.txt                # ログファイル
+├── README.md              # セットアップガイド
+├── requirements.md        # 要件定義書
+├── ai-keisuke.bat         # Windows起動スクリプト
+├── start-en.bat           # Windows起動スクリプト（英語版）
+├── run.sh                 # macOS/Linux起動スクリプト
 ├── data/                  # データ保存
 │   ├── server_data/       # サーバー設定
+│   │   └── .gitkeep      # ディレクトリ保持用
 │   └── user_data/         # ユーザー設定
+│       └── .gitkeep      # ディレクトリ保持用
 ├── prompt/                # AIプロンプト
 │   ├── x_post.txt
 │   ├── question_explain.txt
@@ -142,6 +168,7 @@ ai-keisuke/
 │   └── pencil_memo.txt
 ├── images_homehome/       # 褒め画像背景
 └── attachments/           # 一時ファイル
+    └── .gitkeep          # ディレクトリ保持用
 ```
 
 ## 🚀 起動方法
@@ -294,6 +321,16 @@ Discord Botの仕様により、日本語ファイル名は自動的に英語に
 1. FFmpegがインストール済みか確認
 2. 対応形式（mp3, m4a, ogg, webm, wav）か確認
 3. ファイルサイズが25MB以下か確認
+
+### テキストファイル処理エラー
+1. 対応形式（.txt, .md, .json, .csv, .log, .py, .js, .html, .css, .xml）か確認
+2. ファイルサイズが1MB以下か確認
+3. ファイルエンコーディングがUTF-8またはShift-JISか確認
+
+### Embedリアクションが効かない
+1. Embedが正しく表示されているか確認
+2. Bot生成のEmbedメッセージか確認
+3. 「内容がありません」エラーが出る場合は、ファイル処理機能により解消済み
 
 ## 📋 システム要件
 
