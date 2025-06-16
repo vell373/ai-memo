@@ -1,6 +1,11 @@
 # 環境変数ファイル
 .env
 
+# Python仮想環境
+ai-keisuke-env/
+venv/
+env/
+
 # ログファイル
 log.txt
 

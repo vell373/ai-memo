@@ -45,16 +45,31 @@ Discord上でAI機能を提供するBotです。リアクションベースの�
 
 #### 1. リポジトリの準備
 ```bash
-git clone <repository-url>
+git clone https://github.com/tejastice/ai-keisuke.git
 cd ai-keisuke
 ```
 
-#### 2. 依存関係のインストール
+#### 2. Python仮想環境の作成と有効化
+**仮想環境作成:**
+```bash
+python -m venv ai-keisuke-env
+```
+
+**仮想環境の有効化:**
+```bash
+# macOS/Linux
+source ai-keisuke-env/bin/activate
+
+# Windows
+ai-keisuke-env\Scripts\activate
+```
+
+#### 3. 依存関係のインストール
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 3. FFmpegのインストール
+#### 4. FFmpegのインストール
 **macOS:**
 ```bash
 brew install ffmpeg
@@ -63,14 +78,14 @@ brew install ffmpeg
 **Windows:**
 [FFmpeg公式サイト](https://ffmpeg.org/download.html)からダウンロードしてPATHに追加
 
-#### 4. 環境変数の設定
+#### 5. 環境変数の設定
 `.env`ファイルを作成:
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token_here
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-#### 5. Discord Bot設定
+#### 6. Discord Bot設定
 
 **Discord Developer Portal設定:**
 1. [Discord Developer Portal](https://discord.com/developers/applications)でアプリケーション作成
@@ -91,7 +106,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 - Use Slash Commands
 - View Channels
 
-#### 6. プレミアム機能設定
+#### 7. プレミアム機能設定
 
 `settings.json`を設定:
 ```json
@@ -121,6 +136,28 @@ ai-keisuke/
 │   └── pencil_memo.txt
 ├── images_homehome/       # 褒め画像背景
 └── attachments/           # 一時ファイル
+```
+
+## 🚀 起動方法
+
+### 1. 仮想環境の有効化
+**毎回Bot起動前に仮想環境を有効化してください：**
+```bash
+# macOS/Linux
+source ai-keisuke-env/bin/activate
+
+# Windows
+ai-keisuke-env\Scripts\activate
+```
+
+### 2. Botの実行
+```bash
+python main.py
+```
+
+### 3. 仮想環境の終了（作業終了時）
+```bash
+deactivate
 ```
 
 ## 🎮 使い方
