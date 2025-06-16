@@ -160,7 +160,8 @@ python main.py
 #### 自動実行スクリプト（推奨）
 **Windows:**
 ```cmd
-ai-keisuke.bat
+ai-keisuke.bat       # 日本語版
+start-en.bat         # 英語版（文字化け対策）
 ```
 
 **macOS/Linux:**
@@ -251,6 +252,12 @@ deactivate
 2. Bot権限（Members Intent含む）を確認
 3. `.env`ファイルのトークンを確認
 4. `log.txt`でエラーログを確認
+
+### Windows文字化け問題
+Windowsで`ai-keisuke.bat`の日本語が文字化けする場合：
+1. バッチファイルをShift-JISエンコーディングで保存し直す
+2. または、英語版の起動スクリプトを使用する
+3. コマンドプロンプトで`chcp 65001`を実行してからバッチファイルを実行
 
 ### プレミアム判定が効かない
 1. ユーザーがコミュニティサーバーに参加済みか確認
