@@ -6,6 +6,12 @@ ai-keisuke-env/
 venv/
 env/
 
+# 個人用実行スクリプト
+*.bat
+*.sh
+*.lnk
+run.*
+
 # ログファイル
 log.txt
 

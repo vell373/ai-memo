@@ -151,9 +151,29 @@ ai-keisuke-env\Scripts\activate
 ```
 
 ### 2. Botの実行
+
+#### 手動実行
 ```bash
 python main.py
 ```
+
+#### 自動実行スクリプト（推奨）
+**Windows:**
+```cmd
+ai-keisuke.bat
+```
+
+**macOS/Linux:**
+```bash
+./run.sh
+```
+
+これらのスクリプトは以下を自動で行います：
+- 仮想環境の存在確認
+- .envファイルの存在確認
+- 仮想環境の有効化
+- 依存関係のインストール
+- Bot実行
 
 ### 3. 仮想環境の終了（作業終了時）
 ```bash
