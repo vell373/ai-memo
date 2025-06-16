@@ -52,7 +52,13 @@ cd ai-keisuke
 #### 2. Python仮想環境の作成と有効化
 **仮想環境作成:**
 ```bash
+# macOS/Linux
+python3 -m venv ai-keisuke-env
+
+# Windows
 python -m venv ai-keisuke-env
+# または
+py -m venv ai-keisuke-env
 ```
 
 **仮想環境の有効化:**
@@ -154,6 +160,10 @@ ai-keisuke-env\Scripts\activate
 
 #### 手動実行
 ```bash
+# macOS/Linux
+python3 main.py
+
+# Windows
 python main.py
 ```
 
@@ -166,7 +176,14 @@ start-en.bat         # 英語版（文字化け対策）
 
 **macOS/Linux:**
 ```bash
+# 初回は実行権限を付与
+chmod +x run.sh
+
+# 実行
 ./run.sh
+
+# または直接実行
+bash run.sh
 ```
 
 これらのスクリプトは以下を自動で行います：
