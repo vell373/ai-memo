@@ -124,10 +124,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# OpenAIクライアントの初期化
+# OpenAIクライアントの初期化（60秒タイムアウト設定）
 client_openai = None
 if OPENAI_API_KEY:
-    client_openai = OpenAI(api_key=OPENAI_API_KEY)
+    client_openai = OpenAI(
+        api_key=OPENAI_API_KEY,
+        timeout=60.0  # 60秒タイムアウト（デフォルトは10分）
+    )
 
 
 # Intentsの設定
@@ -665,14 +668,23 @@ async def transcribe_audio(message, channel):
             for idx, part_file_path in enumerate(parts):
                 logger.info(f"{idx+1}/{split_count}: {part_file_path.name} 文字起こし中...")
                 
-                with open(part_file_path, "rb") as audio_file:
-                    transcription = client_openai.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="ja"  # 日本語指定
-                    )
-                    full_transcription += transcription.text + "\n"
-                    logger.info(f"パート {idx+1} の文字起こし完了")
+                try:
+                    with open(part_file_path, "rb") as audio_file:
+                        transcription = client_openai.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            language="ja"  # 日本語指定
+                        )
+                        full_transcription += transcription.text + "\n"
+                        logger.info(f"パート {idx+1} の文字起こし完了")
+                except Exception as api_error:
+                    logger.error(f"Whisper API エラー (パート {idx+1}): {api_error}")
+                    # タイムアウトエラーの場合は特別なメッセージ
+                    if "timeout" in str(api_error).lower() or "timed out" in str(api_error).lower():
+                        await channel.send(f"{user.mention} ⏰ 申し訳ありません！文字起こし処理がタイムアウトしました。\n音声ファイルが大きいか、OpenAI APIが混雑している可能性があります。\n🔄 少し時間をおいてもう一度試してみてください。")
+                    else:
+                        await channel.send(f"{user.mention} ❌ 文字起こし処理中にエラーが発生しました。\n🔄 もう一度試してみてください。")
+                    return
             
             logger.info(f"文字起こし完了: {len(full_transcription)}文字")
             
