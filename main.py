@@ -289,7 +289,7 @@ def can_use_feature(user_data, is_premium):
     
     # 同じ日の場合は制限チェック
     if daily_usage_count >= FREE_USER_DAILY_LIMIT:
-        return False, f"😅 今日の分の利用回数を使い切っちゃいました！\n無料プランでは1日{FREE_USER_DAILY_LIMIT}回まで利用できます。明日また遊びに来てくださいね！✨"
+        return False, f"😅 今日の分の利用回数を使い切っちゃいました！\n無料プランでは1日{FREE_USER_DAILY_LIMIT}回まで利用できます。明日また遊びに来てくださいね！✨\n\n💎 **もっと使いたい場合は有料プランがおすすめです！**\n🤖 このBotのプロフィールを見ると、プレミアム会員の詳細と登録方法が載ってるよ〜"
     
     # 使用回数を増加
     user_data["daily_usage_count"] = daily_usage_count + 1
