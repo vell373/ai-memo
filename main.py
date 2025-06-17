@@ -1834,6 +1834,9 @@ async def on_message(message):
             # メッセージ内容があるかチェック
             has_content = bool(message.content.strip())
             
+            # 最初のリアクション前に1秒待機（エラー回避のため）
+            await asyncio.sleep(1.0)
+            
             # 音声ファイルのみの場合はマイクだけ
             if has_audio and not has_non_audio and not has_content:
                 await message.add_reaction('🎤')
