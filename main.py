@@ -170,6 +170,7 @@ def migrate_user_data(user_data, user_id, username):
         "username": username,
         "custom_prompt_x_post": "",
         "custom_prompt_article": "",
+        "custom_prompt_memo": "",
         "status": "free",
         "last_used_date": "",
         "daily_usage_count": 0
@@ -572,10 +573,14 @@ async def transcribe_audio(message, channel):
             await channel.send(f"❌ ファイルサイズが{size_text}を超えています。")
             return
         
+        # メッセージリンクを作成
+        user = message.author
+        message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+        
         if is_video:
-            await channel.send("🎬 動画から音声を抽出して文字起こしを開始するよ〜！ちょっと待っててね")
+            await channel.send(f"{user.mention} 🎬 動画から音声を抽出して文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
         else:
-            await channel.send("🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね")
+            await channel.send(f"{user.mention} 🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
         
         # 一時ディレクトリ作成
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -783,6 +788,11 @@ async def help_command(interaction: discord.Interaction):
         value="記事作成用のカスタムプロンプトを設定（空白入力で無効化）", 
         inline=False
     )
+    embed.add_field(
+        name="/set_custom_prompt_memo", 
+        value="メモ作成用のカスタムプロンプトを設定（空白入力で無効化）", 
+        inline=False
+    )
     
     await interaction.response.send_message(embed=embed)
 
@@ -869,6 +879,7 @@ class CustomArticlePromptModal(discord.ui.Modal, title='記事作成用カスタ
                 user_data = {
                     "custom_prompt_x_post": "",
                     "custom_prompt_article": "",
+                    "custom_prompt_memo": "",
                     "status": "free",
                     "last_used_date": "",
                     "daily_usage_count": 0
@@ -901,6 +912,66 @@ class CustomArticlePromptModal(discord.ui.Modal, title='記事作成用カスタ
 async def set_custom_prompt_article_command(interaction: discord.Interaction):
     """記事用カスタムプロンプト設定コマンド"""
     modal = CustomArticlePromptModal()
+    await interaction.response.send_modal(modal)
+
+# メモ作成用カスタムプロンプト設定のModalクラス
+class CustomMemoPromptModal(discord.ui.Modal, title='メモ作成用カスタムプロンプト設定'):
+    def __init__(self):
+        super().__init__()
+
+    # テキスト入力エリア（複数行対応）
+    prompt_input = discord.ui.TextInput(
+        label='カスタムプロンプト',
+        placeholder='メモ作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空白のみを入力するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
+        style=discord.TextStyle.paragraph,  # 複数行入力
+        max_length=2000,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            prompt = self.prompt_input.value.strip()  # 前後の空白を削除
+            
+            # ユーザーデータを読み込み（存在しない場合は新規作成）
+            user_id = interaction.user.id
+            user_data = load_user_data(user_id)
+            if user_data is None:
+                user_data = {
+                    "custom_prompt_x_post": "",
+                    "custom_prompt_article": "",
+                    "custom_prompt_memo": "",
+                    "status": "free",
+                    "last_used_date": "",
+                    "daily_usage_count": 0
+                }
+            
+            # メモ用カスタムプロンプトを更新
+            user_data["custom_prompt_memo"] = prompt
+            
+            # ユーザーデータを保存
+            save_user_data(user_id, user_data)
+            
+            # 設定内容に応じてメッセージを変更
+            if prompt:
+                print(f"ユーザー {interaction.user.name} ({user_id}) がメモ用カスタムプロンプトを設定しました")
+                print(f"プロンプト内容: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
+                await interaction.response.send_message("✅ メモ作成用カスタムプロンプトを設定しました！", ephemeral=True)
+            else:
+                print(f"ユーザー {interaction.user.name} ({user_id}) がメモ用カスタムプロンプトを無効化しました")
+                await interaction.response.send_message("✅ メモ作成用カスタムプロンプトを無効化しました。デフォルトプロンプトを使用します。", ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"メモ用カスタムプロンプト設定エラー: {e}")
+            await interaction.response.send_message("❌ エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logger.error(f"Modal エラー: {error}")
+        await interaction.response.send_message("❌ エラーが発生しました。管理者にお問い合わせください。", ephemeral=True)
+
+@bot.tree.command(name="set_custom_prompt_memo", description="メモ作成用のカスタムプロンプトを設定します")
+async def set_custom_prompt_memo_command(interaction: discord.Interaction):
+    """メモ用カスタムプロンプト設定コマンド"""
+    modal = CustomMemoPromptModal()
     await interaction.response.send_modal(modal)
 
 @bot.tree.command(name="activate", description="このチャンネルでBotを有効化します")
@@ -1071,6 +1142,7 @@ async def on_raw_reaction_add(payload):
                     "username": user.name,
                     "custom_prompt_x_post": "",
                     "custom_prompt_article": "",
+                    "custom_prompt_memo": "",
                     "status": "free",
                     "last_used_date": "",
                     "daily_usage_count": 0
@@ -1095,7 +1167,7 @@ async def on_raw_reaction_add(payload):
             # 使用制限チェック
             can_use, limit_message = can_use_feature(user_data, is_premium)
             if not can_use:
-                await channel.send(limit_message)
+                await channel.send(f"{user.mention} {limit_message}")
                 return
             
             # 使用回数更新
@@ -1131,7 +1203,8 @@ async def on_raw_reaction_add(payload):
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
                     # 処理開始メッセージを送信
-                    await channel.send("X用の投稿を作ってあげるね〜！ちょっと待っててね")
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await channel.send(f"{user.mention} X用の投稿を作ってあげるね〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
                     
                     # X投稿用プロンプトを読み込み（カスタムプロンプトを優先）
                     x_prompt = None
@@ -1206,12 +1279,12 @@ async def on_raw_reaction_add(payload):
                             
                         except Exception as e:
                             logger.error(f"OpenAI API エラー: {e}")
-                            await channel.send("❌ 要約の生成中にエラーが発生しました。")
+                            await channel.send(f"{user.mention} ❌ 要約の生成中にエラーが発生しました。")
                     else:
                         logger.error("エラー: OpenAI APIキーが設定されていません")
-                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                        await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send("⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
             
             # 🎤 マイク：音声・動画文字起こし
             elif payload.emoji.name == '🎤':
@@ -1219,7 +1292,7 @@ async def on_raw_reaction_add(payload):
                 if message.attachments:
                     await transcribe_audio(message, channel)
                 else:
-                    await channel.send("⚠️ 音声・動画ファイルが添付されたメッセージにリアクションしてください。")
+                    await channel.send(f"{user.mention} ⚠️ 音声・動画ファイルが添付されたメッセージにリアクションしてください。")
             
             # ❤️ ハート：絶賛モード
             elif payload.emoji.name == '❤️':
@@ -1247,9 +1320,12 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # 処理開始メッセージを送信
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await channel.send(f"{user.mention} わー！褒めさせて〜！ちょっと待っててね✨\n📎 元メッセージ: {message_link}")
+                    
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
-                    
                     
                     # 褒めプロンプトを読み込み
                     praise_prompt = None
@@ -1324,12 +1400,12 @@ async def on_raw_reaction_add(payload):
                             
                         except Exception as e:
                             logger.error(f"OpenAI API エラー (褒め機能): {e}")
-                            await channel.send("❌ 褒めメッセージの生成中にエラーが発生しました。")
+                            await channel.send(f"{user.mention} ❌ 褒めメッセージの生成中にエラーが発生しました。")
                     else:
                         logger.error("エラー: OpenAI APIキーが設定されていません")
-                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                        await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send("⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
             
             # ❓ 疑問符：AI説明
             elif payload.emoji.name == '❓':
@@ -1361,7 +1437,8 @@ async def on_raw_reaction_add(payload):
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
                     # 処理開始メッセージを送信
-                    await channel.send("🤔 投稿内容について詳しく解説するね〜！ちょっと待っててね")
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await channel.send(f"{user.mention} 🤔 投稿内容について詳しく解説するね〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
                     
                     # 解説用プロンプトを読み込み
                     explain_prompt = None
@@ -1413,12 +1490,12 @@ async def on_raw_reaction_add(payload):
                             
                         except Exception as e:
                             logger.error(f"OpenAI API エラー (解説機能): {e}")
-                            await channel.send("❌ 解説の生成中にエラーが発生しました。")
+                            await channel.send(f"{user.mention} ❌ 解説の生成中にエラーが発生しました。")
                     else:
                         logger.error("エラー: OpenAI APIキーが設定されていません")
-                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                        await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send("⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
             
             # ✏️ 鉛筆：Obsidianメモ作成
             elif payload.emoji.name == '✏️':
@@ -1447,21 +1524,34 @@ async def on_raw_reaction_add(payload):
                 
                 if input_text:
                     # 処理開始メッセージ
-                    await channel.send("📝 メモを作るよ〜！ちょっと待っててね")
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await channel.send(f"{user.mention} 📝 メモを作るよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
                     
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
-                    # Obsidianメモ用プロンプトを読み込み
+                    # メモ用プロンプトを読み込み
                     memo_prompt = None
-                    prompt_path = script_dir / "prompt" / "pencil_memo.txt"
-                    if prompt_path.exists():
-                        with open(prompt_path, 'r', encoding='utf-8') as f:
-                            memo_prompt = f.read()
-                        logger.info("Obsidianメモプロンプトファイルを使用")
-                    else:
-                        memo_prompt = "あなたはDiscordメッセージの内容をObsidianメモとして整理するアシスタントです。内容に忠実にメモ化してください。追加情報は加えず、原文を尊重してください。"
-                        logger.info("フォールバックメモプロンプトを使用")
+                    
+                    # 1. ユーザーのカスタムプロンプトをチェック
+                    if user_data and user_data.get('custom_prompt_memo'):
+                        memo_prompt = user_data['custom_prompt_memo']
+                        logger.info(f"ユーザー {user.name} のメモ用カスタムプロンプトを使用")
+                    
+                    # 2. カスタムプロンプトがない場合はデフォルトプロンプトファイルを使用
+                    if not memo_prompt:
+                        prompt_path = script_dir / "prompt" / "pencil_memo.txt"
+                        if prompt_path.exists():
+                            with open(prompt_path, 'r', encoding='utf-8') as f:
+                                memo_prompt = f.read()
+                            logger.info("デフォルトメモプロンプトファイルを使用")
+                        else:
+                            memo_prompt = "あなたはDiscordメッセージの内容をObsidianメモとして整理するアシスタントです。内容に忠実にメモ化してください。追加情報は加えず、原文を尊重してください。"
+                            logger.info("フォールバックメモプロンプトを使用")
+                    
+                    # プロンプトにJSON出力指示を追加（カスタムプロンプトでも対応）
+                    json_instruction = '\n\n出力はJSON形式で、以下のフォーマットに従ってください：\n{"english_title": "english_title_for_filename", "content": "メモの内容"}'
+                    memo_prompt += json_instruction
                     
                     # OpenAI APIでメモを生成（JSONモード）
                     if client_openai:
@@ -1481,12 +1571,10 @@ async def on_raw_reaction_add(payload):
                             response_content = response.choices[0].message.content
                             try:
                                 memo_json = json.loads(response_content)
-                                japanese_title = memo_json.get("japanese_title", "無題のメモ")
                                 english_title = memo_json.get("english_title", "untitled_memo")
                                 content = memo_json.get("content", input_text)
                             except json.JSONDecodeError:
                                 logger.warning(f"JSON解析エラー、フォールバックを使用: {response_content}")
-                                japanese_title = "無題のメモ"
                                 english_title = "untitled_memo"
                                 content = input_text
                             
@@ -1504,8 +1592,8 @@ async def on_raw_reaction_add(payload):
                             attachments_dir.mkdir(exist_ok=True)
                             file_path = attachments_dir / filename
                             
-                            # ファイル内容：1行目に日本語タイトル、その下にコンテンツ
-                            file_content = f"# {japanese_title}\n\n{content}"
+                            # ファイル内容：コンテンツをそのまま保存
+                            file_content = content
                             
                             # UTF-8でファイル保存
                             with open(file_path, 'w', encoding='utf-8') as f:
@@ -1517,7 +1605,7 @@ async def on_raw_reaction_add(payload):
                                 # 結果を送信
                                 embed = discord.Embed(
                                     title="📝 Obsidianメモを作成しました",
-                                    description=f"**タイトル**: {japanese_title}\n**ファイル名**: `{filename}`",
+                                    description=f"**ファイル名**: `{filename}`",
                                     color=0x7C3AED
                                 )
                                 
@@ -1556,12 +1644,12 @@ async def on_raw_reaction_add(payload):
                             
                         except Exception as e:
                             logger.error(f"OpenAI API エラー (メモ機能): {e}")
-                            await channel.send("❌ メモの生成中にエラーが発生しました。")
+                            await channel.send(f"{user.mention} ❌ メモの生成中にエラーが発生しました。")
                     else:
                         logger.error("エラー: OpenAI APIキーが設定されていません")
-                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                        await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send("⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
             
             # 📝 メモ：記事作成
             elif payload.emoji.name == '📝':
@@ -1590,7 +1678,8 @@ async def on_raw_reaction_add(payload):
                 
                 if input_text:
                     # 処理開始メッセージ
-                    await channel.send("📝 記事を作成するよ〜！ちょっと待っててね")
+                    message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
+                    await channel.send(f"{user.mention} 📝 記事を作成するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
                     
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
@@ -1708,12 +1797,12 @@ async def on_raw_reaction_add(payload):
                             
                         except Exception as e:
                             logger.error(f"OpenAI API エラー (記事機能): {e}")
-                            await channel.send("❌ 記事の生成中にエラーが発生しました。")
+                            await channel.send(f"{user.mention} ❌ 記事の生成中にエラーが発生しました。")
                     else:
                         logger.error("エラー: OpenAI APIキーが設定されていません")
-                        await channel.send("❌ エラーが発生しました。管理者にお問い合わせください。")
+                        await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send("⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
 
 @bot.event
 async def on_message(message):
