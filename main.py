@@ -539,7 +539,7 @@ def shorten_url(long_url):
         logger.error(f"URL短縮予期しないエラー: {e}")
         return long_url
 
-async def transcribe_audio(message, channel):
+async def transcribe_audio(message, channel, reaction_user):
     """音声ファイルを文字起こしする"""
     try:
         
@@ -577,13 +577,12 @@ async def transcribe_audio(message, channel):
             return
         
         # メッセージリンクを作成
-        user = message.author
         message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
         
         if is_video:
-            await channel.send(f"{user.mention} 🎬 動画から音声を抽出して文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
+            await channel.send(f"{reaction_user.mention} 🎬 動画から音声を抽出して文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
         else:
-            await channel.send(f"{user.mention} 🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
+            await channel.send(f"{reaction_user.mention} 🎤 音声の文字起こしを開始するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
         
         # 一時ディレクトリ作成
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1302,7 +1301,7 @@ async def on_raw_reaction_add(payload):
             elif payload.emoji.name == '🎤':
                 # 音声・動画ファイルがあるかチェック
                 if message.attachments:
-                    await transcribe_audio(message, channel)
+                    await transcribe_audio(message, channel, user)
                 else:
                     await channel.send(f"{user.mention} ⚠️ 音声・動画ファイルが添付されたメッセージにリアクションしてください。")
             
