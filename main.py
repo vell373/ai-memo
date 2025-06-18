@@ -638,7 +638,7 @@ async def transcribe_audio(message, channel):
                 actual_size_mb = target_attachment.size / (1024 * 1024)
                 logger.info(f"音声ファイルサイズ: {actual_size_mb:.1f}MB")
             
-            time_based_split_count = max(1, int(audio_length_ms // (900 * 1000)))  # 15分基準
+            time_based_split_count = max(1, int(audio_length_ms // (600 * 1000)))  # 10分基準
             size_based_split_count = max(1, int(actual_size_mb / target_size_mb))  # 実際のサイズ基準
             
             # より大きい分割数を採用（安全のため）
