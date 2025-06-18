@@ -129,7 +129,7 @@ client_openai = None
 if OPENAI_API_KEY:
     client_openai = OpenAI(
         api_key=OPENAI_API_KEY,
-        timeout=60.0  # 60秒タイムアウト（デフォルトは10分）
+        timeout=180.0  # 180秒タイムアウト（長い音声ファイル対応）
     )
 
 
