@@ -122,13 +122,13 @@ OPENAI_API_KEY=your_openai_api_key_here
    Bot Permissions: 274878286912
    ```
 
-**必要な権限:**
-- Send Messages
-- Attach Files  
-- Read Message History
-- Add Reactions
-- Use Slash Commands
-- View Channels
+**必要な権限（6つ）:**
+- View Channels （チャンネル表示）
+- Send Messages （メッセージ送信）
+- Attach Files （ファイル添付）
+- Read Message History （メッセージ履歴読み取り）
+- Add Reactions （リアクション追加 - /activate時等に自動追加）
+- Use Slash Commands （スラッシュコマンド使用）
 
 #### 7. プレミアム機能設定
 
@@ -158,8 +158,7 @@ ai-keisuke/
 ├── log.txt                # ログファイル
 ├── README.md              # セットアップガイド
 ├── requirements.md        # 要件定義書
-├── ai-keisuke.bat         # Windows起動スクリプト
-├── start-en.bat           # Windows起動スクリプト（英語版）
+├── ai-keisuke.bat         # Windows起動スクリプト（英語版）
 ├── run.sh                 # macOS/Linux起動スクリプト
 ├── data/                  # データ保存
 │   ├── server_data/       # サーバー設定
@@ -203,8 +202,7 @@ python main.py
 #### 自動実行スクリプト（推奨）
 **Windows:**
 ```cmd
-ai-keisuke.bat       # 日本語版
-start-en.bat         # 英語版（文字化け対策）
+ai-keisuke.bat       # 英語版（文字化け対策済み）
 ```
 
 **macOS/Linux:**
@@ -229,6 +227,7 @@ bash run.sh
 **Windowsバッチファイルの特徴:**
 - Python、python3、pyコマンドを自動検出
 - 仮想環境を自動的に作成
+- 英語版で文字化け問題を回避
 - エラー時の詳細なメッセージ表示
 
 ### 3. 仮想環境の終了（作業終了時）
@@ -313,10 +312,10 @@ deactivate
 4. `log.txt`でエラーログを確認
 
 ### Windows文字化け問題
-Windowsで`ai-keisuke.bat`の日本語が文字化けする場合：
-1. バッチファイルをShift-JISエンコーディングで保存し直す
-2. または、英語版の起動スクリプトを使用する
-3. コマンドプロンプトで`chcp 65001`を実行してからバッチファイルを実行
+現在の`ai-keisuke.bat`は英語版で作成済みのため、文字化け問題は解消されています。
+もし問題が発生した場合：
+1. コマンドプロンプトで`chcp 65001`を実行してからバッチファイルを実行
+2. 手動でPython仮想環境を有効化してからPythonを実行
 
 ### プレミアム判定が効かない
 1. ユーザーがコミュニティサーバーに参加済みか確認

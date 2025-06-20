@@ -12,7 +12,6 @@ open.bat
 
 # プロジェクトの起動スクリプトは含める
 !ai-keisuke.bat
-!start-en.bat
 !run.sh
 
 # ログファイル

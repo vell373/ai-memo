@@ -1,26 +1,26 @@
 @echo off
-REM AI けいすけ Bot 起動スクリプト (Windows)
-REM このスクリプトは仮想環境を自動的に有効化してBotを実行します
+REM AI Keisuke Bot Startup Script (Windows - English)
+REM This script automatically activates virtual environment and runs the bot
 
 echo ==============================
-echo   AI けいすけ Bot 起動中...
+echo   AI Keisuke Bot Starting...
 echo ==============================
 
-REM スクリプトのディレクトリに移動
+REM Change to script directory
 cd /d %~dp0
 
-REM 仮想環境が存在するかチェック
+REM Check if virtual environment exists
 if not exist "ai-keisuke-env\Scripts\activate.bat" (
-    echo [エラー] 仮想環境が見つかりません。
-    echo 以下のいずれかのコマンドで作成できます：
+    echo [ERROR] Virtual environment not found.
+    echo Please create virtual environment with one of these commands:
     echo.
     echo   python -m venv ai-keisuke-env
     echo   python3 -m venv ai-keisuke-env
     echo   py -m venv ai-keisuke-env
     echo.
-    echo 自動的に仮想環境を作成します...
+    echo Creating virtual environment automatically...
     
-    REM 異なるPythonコマンドを試す
+    REM Try different Python commands
     python -m venv ai-keisuke-env 2>nul
     if not exist "ai-keisuke-env\Scripts\activate.bat" (
         python3 -m venv ai-keisuke-env 2>nul
@@ -31,19 +31,19 @@ if not exist "ai-keisuke-env\Scripts\activate.bat" (
     
     if not exist "ai-keisuke-env\Scripts\activate.bat" (
         echo.
-        echo [エラー] 仮想環境の作成に失敗しました。
-        echo Python 3.8以上をインストールしてから再度実行してください。
+        echo [ERROR] Failed to create virtual environment.
+        echo Please install Python 3.8 or higher and try again.
         echo.
         pause
         exit /b 1
     )
-    echo [成功] 仮想環境を作成しました！
+    echo [SUCCESS] Virtual environment created successfully!
 )
 
-REM .envファイルが存在するかチェック
+REM Check if .env file exists
 if not exist ".env" (
-    echo [エラー] .envファイルが見つかりません。
-    echo 以下の内容で.envファイルを作成してください：
+    echo [ERROR] .env file not found.
+    echo Please create .env file with:
     echo DISCORD_BOT_TOKEN=your_discord_bot_token_here
     echo OPENAI_API_KEY=your_openai_api_key_here
     echo.
@@ -51,17 +51,17 @@ if not exist ".env" (
     exit /b 1
 )
 
-echo [情報] 仮想環境を有効化しています...
+echo [INFO] Activating virtual environment...
 call ai-keisuke-env\Scripts\activate.bat
 
-echo [情報] 依存関係をチェックしています...
+echo [INFO] Checking dependencies...
 pip install -r requirements.txt --quiet
 
-echo [情報] AI けいすけ Bot を起動しています...
-echo [情報] 終了するには Ctrl+C を押してください
+echo [INFO] Starting AI Keisuke Bot...
+echo [INFO] Press Ctrl+C to stop
 echo.
 python main.py
 
 echo.
-echo [情報] Bot が終了しました。
+echo [INFO] Bot has stopped.
 pause
