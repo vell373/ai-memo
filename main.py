@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import urllib.parse
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import logging
 import asyncio
 import tempfile
@@ -263,7 +263,9 @@ def is_premium_user(user_id):
 
 def can_use_feature(user_data, is_premium):
     """機能使用可能かチェックし、使用回数を更新"""
-    today = datetime.now().strftime("%Y-%m-%d")
+    # 日本時間（JST）で現在の日付を取得
+    jst = timezone(timedelta(hours=9))
+    today = datetime.now(jst).strftime("%Y-%m-%d")
     
     # プレミアムユーザーは無制限（ただし使用回数はカウント）
     if is_premium:
@@ -809,17 +811,18 @@ async def help_command(interaction: discord.Interaction):
 
 # カスタムプロンプト設定用のModalクラス
 class CustomPromptModal(discord.ui.Modal, title='X投稿用カスタムプロンプト設定'):
-    def __init__(self):
+    def __init__(self, current_prompt=""):
         super().__init__()
-
-    # テキスト入力エリア（複数行対応）
-    prompt_input = discord.ui.TextInput(
-        label='カスタムプロンプト',
-        placeholder='X投稿生成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空白のみを入力するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
-        style=discord.TextStyle.paragraph,  # 複数行入力
-        max_length=2000,
-        required=True
-    )
+        # テキスト入力エリア（複数行対応）
+        self.prompt_input = discord.ui.TextInput(
+            label='カスタムプロンプト',
+            placeholder='X投稿生成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空のまま送信するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
+            style=discord.TextStyle.paragraph,  # 複数行入力
+            max_length=2000,
+            required=False,
+            default=current_prompt  # 既存の値をプリフィル
+        )
+        self.add_item(self.prompt_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -862,22 +865,30 @@ class CustomPromptModal(discord.ui.Modal, title='X投稿用カスタムプロン
 @bot.tree.command(name="set_custom_prompt_x_post", description="X投稿用のカスタムプロンプトを設定します")
 async def set_custom_prompt_x_post_command(interaction: discord.Interaction):
     """カスタムプロンプト設定コマンド"""
-    modal = CustomPromptModal()
+    # 既存のユーザーデータを読み込み
+    user_id = interaction.user.id
+    user_data = load_user_data(user_id)
+    current_prompt = ""
+    if user_data and "custom_prompt_x_post" in user_data:
+        current_prompt = user_data["custom_prompt_x_post"]
+    
+    modal = CustomPromptModal(current_prompt)
     await interaction.response.send_modal(modal)
 
 # 記事作成用カスタムプロンプト設定のModalクラス
 class CustomArticlePromptModal(discord.ui.Modal, title='記事作成用カスタムプロンプト設定'):
-    def __init__(self):
+    def __init__(self, current_prompt=""):
         super().__init__()
-
-    # テキスト入力エリア（複数行対応）
-    prompt_input = discord.ui.TextInput(
-        label='カスタムプロンプト',
-        placeholder='記事作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空白のみを入力するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
-        style=discord.TextStyle.paragraph,  # 複数行入力
-        max_length=2000,
-        required=True
-    )
+        # テキスト入力エリア（複数行対応）
+        self.prompt_input = discord.ui.TextInput(
+            label='カスタムプロンプト',
+            placeholder='記事作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空のまま送信するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
+            style=discord.TextStyle.paragraph,  # 複数行入力
+            max_length=2000,
+            required=False,
+            default=current_prompt  # 既存の値をプリフィル
+        )
+        self.add_item(self.prompt_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -922,7 +933,14 @@ class CustomArticlePromptModal(discord.ui.Modal, title='記事作成用カスタ
 @bot.tree.command(name="set_custom_prompt_article", description="記事作成用のカスタムプロンプトを設定します")
 async def set_custom_prompt_article_command(interaction: discord.Interaction):
     """記事用カスタムプロンプト設定コマンド"""
-    modal = CustomArticlePromptModal()
+    # 既存のユーザーデータを読み込み
+    user_id = interaction.user.id
+    user_data = load_user_data(user_id)
+    current_prompt = ""
+    if user_data and "custom_prompt_article" in user_data:
+        current_prompt = user_data["custom_prompt_article"]
+    
+    modal = CustomArticlePromptModal(current_prompt)
     await interaction.response.send_modal(modal)
 
 # メモ作成用カスタムプロンプト設定のModalクラス
@@ -933,10 +951,10 @@ class CustomMemoPromptModal(discord.ui.Modal, title='メモ作成用カスタム
     # テキスト入力エリア（複数行対応）
     prompt_input = discord.ui.TextInput(
         label='カスタムプロンプト',
-        placeholder='メモ作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空白のみを入力するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
+        placeholder='メモ作成用のプロンプトを入力してください...\n改行も使用できます。\n\n※ 空のまま送信するとカスタムプロンプトが無効になり、デフォルトプロンプトが使用されます。',
         style=discord.TextStyle.paragraph,  # 複数行入力
         max_length=2000,
-        required=True
+        required=False
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -982,7 +1000,14 @@ class CustomMemoPromptModal(discord.ui.Modal, title='メモ作成用カスタム
 @bot.tree.command(name="set_custom_prompt_memo", description="メモ作成用のカスタムプロンプトを設定します")
 async def set_custom_prompt_memo_command(interaction: discord.Interaction):
     """メモ用カスタムプロンプト設定コマンド"""
-    modal = CustomMemoPromptModal()
+    # 既存のユーザーデータを読み込み
+    user_id = interaction.user.id
+    user_data = load_user_data(user_id)
+    current_prompt = ""
+    if user_data and "custom_prompt_memo" in user_data:
+        current_prompt = user_data["custom_prompt_memo"]
+    
+    modal = CustomMemoPromptModal(current_prompt)
     await interaction.response.send_modal(modal)
 
 @bot.tree.command(name="activate", description="このチャンネルでBotを有効化します")
