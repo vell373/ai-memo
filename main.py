@@ -124,6 +124,120 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 統計管理クラス
+class StatsManager:
+    def __init__(self):
+        self.stats_dir = script_dir / "data" / "activity_logs"
+        self.stats_dir.mkdir(exist_ok=True)
+        logger.info("統計管理システムを初期化しました")
+    
+    async def record_user_activity(self, user_id, bot_instance=None):
+        """ユーザーアクティビティをリアルタイム記録"""
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            log_file = self.stats_dir / f"{today}.json"
+            
+            # 今日のログを読み込み
+            if log_file.exists():
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            else:
+                # 新しい日の最初の記録時にサーバー数を記録
+                server_count = len(bot_instance.guilds) if bot_instance else 0
+                data = {
+                    "date": today,
+                    "active_users": [],
+                    "total_actions": 0,
+                    "server_count": server_count
+                }
+                logger.info(f"新しい日の統計開始: サーバー数 {server_count}")
+            
+            # ユーザーを追加（重複なし）
+            if user_id not in data["active_users"]:
+                data["active_users"].append(user_id)
+                logger.debug(f"新規アクティブユーザー記録: {user_id}")
+            
+            data["total_actions"] += 1
+            
+            # ログファイルに保存
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+                
+        except Exception as e:
+            logger.error(f"アクティビティ記録エラー: {e}")
+    
+    def calculate_dau(self, target_date=None):
+        """指定日のDAU計算（デフォルトは今日）"""
+        try:
+            if target_date is None:
+                target_date = datetime.now().strftime("%Y-%m-%d")
+            
+            log_file = self.stats_dir / f"{target_date}.json"
+            
+            if log_file.exists():
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return len(data.get("active_users", []))
+            return 0
+            
+        except Exception as e:
+            logger.error(f"DAU計算エラー: {e}")
+            return 0
+    
+    def calculate_mau(self, target_date=None):
+        """指定日から過去30日間のMAU計算"""
+        try:
+            if target_date is None:
+                base_date = datetime.now()
+            else:
+                base_date = datetime.strptime(target_date, "%Y-%m-%d")
+            
+            mau_users = set()
+            
+            for i in range(30):
+                date = (base_date - timedelta(days=i)).strftime("%Y-%m-%d")
+                log_file = self.stats_dir / f"{date}.json"
+                
+                if log_file.exists():
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        mau_users.update(data.get("active_users", []))
+            
+            return len(mau_users)
+            
+        except Exception as e:
+            logger.error(f"MAU計算エラー: {e}")
+            return 0
+    
+    def get_stats_summary(self):
+        """統計サマリーを取得"""
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            dau = self.calculate_dau()
+            mau = self.calculate_mau()
+            
+            # 総アクション数・サーバー数（今日）
+            today_log = self.stats_dir / f"{today}.json"
+            total_actions_today = 0
+            server_count_today = 0
+            if today_log.exists():
+                with open(today_log, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    total_actions_today = data.get("total_actions", 0)
+                    server_count_today = data.get("server_count", 0)
+            
+            return {
+                "date": today,
+                "dau": dau,
+                "mau": mau,
+                "total_actions_today": total_actions_today,
+                "server_count": server_count_today
+            }
+            
+        except Exception as e:
+            logger.error(f"統計サマリー取得エラー: {e}")
+            return {"date": "", "dau": 0, "mau": 0, "total_actions_today": 0, "server_count": 0}
+
 # OpenAIクライアントの初期化（60秒タイムアウト設定）
 client_openai = None
 if OPENAI_API_KEY:
@@ -141,6 +255,10 @@ intents.members = True
 
 # Botの初期化
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+# 統計管理インスタンスを作成
+stats_manager = StatsManager()
+
 
 def load_server_data(server_id):
     """サーバーデータを読み込む"""
@@ -1115,33 +1233,73 @@ async def status_command(interaction: discord.Interaction):
     server_id = str(interaction.guild.id)
     server_data = load_server_data(server_id)
     
-    embed = discord.Embed(
-        title="🔍 Bot ステータス",
-        color=0x0099ff
-    )
-    
-    if server_data is None or not server_data.get('active_channel_ids'):
-        embed.add_field(
-            name="有効チャンネル",
-            value="なし",
-            inline=False
-        )
-    else:
+    if server_data and "active_channel_ids" in server_data:
         channel_list = []
-        for channel_id in server_data['active_channel_ids']:
+        for channel_id in server_data["active_channel_ids"]:
             channel = bot.get_channel(int(channel_id))
             if channel:
-                channel_list.append(f"#{channel.name}")
+                channel_list.append(f"• {channel.name}")
             else:
-                channel_list.append(f"不明なチャンネル（ID: {channel_id}）")
+                channel_list.append(f"• ID: {channel_id} (チャンネルが見つかりません)")
         
-        embed.add_field(
-            name="有効チャンネル",
-            value="\n".join(channel_list) if channel_list else "なし",
-            inline=False
-        )
+        if channel_list:
+            channel_text = "\n".join(channel_list)
+        else:
+            channel_text = "有効なチャンネルがありません"
+    else:
+        channel_text = "有効なチャンネルがありません"
     
-    await interaction.response.send_message(embed=embed)
+    embed = discord.Embed(
+        title="📋 有効チャンネル一覧",
+        description=channel_text,
+        color=0x00ff00
+    )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="stats", description="Bot統計情報を表示します")
+async def stats_command(interaction: discord.Interaction):
+    """統計コマンド（オーナー専用）"""
+    # オーナー権限チェック
+    user_id = str(interaction.user.id)
+    
+    # settings.jsonからowner_user_idを取得
+    settings_path = script_dir / "settings.json"
+    if settings_path.exists():
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+            owner_user_id = settings.get("owner_user_id")
+    else:
+        owner_user_id = None
+    
+    # オーナーかどうかチェック
+    if not owner_user_id or user_id != str(owner_user_id):
+        await interaction.response.send_message("❌ このコマンドはオーナーのみ使用できます。", ephemeral=True)
+        return
+    
+    try:
+        # 統計を計算
+        stats = stats_manager.get_stats_summary()
+        server_count = len(bot.guilds)
+        
+        embed = discord.Embed(
+            title="📊 Bot統計情報",
+            color=0x00ff00
+        )
+        
+        embed.add_field(name="📅 集計日", value=stats["date"], inline=True)
+        embed.add_field(name="🏠 現在のサーバー数", value=f"{server_count:,}", inline=True)
+        embed.add_field(name="🏠 記録時サーバー数", value=f"{stats['server_count']:,}", inline=True)
+        embed.add_field(name="📈 DAU", value=f"{stats['dau']:,}", inline=True)
+        embed.add_field(name="📊 MAU", value=f"{stats['mau']:,}", inline=True)
+        embed.add_field(name="⚡ 今日のアクション数", value=f"{stats['total_actions_today']:,}", inline=True)
+        embed.add_field(name="🕐 更新時刻", value=datetime.now().strftime("%H:%M:%S"), inline=True)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        logger.error(f"統計コマンドエラー: {e}")
+        await interaction.response.send_message("❌ 統計取得中にエラーが発生しました。", ephemeral=True)
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -1161,6 +1319,9 @@ async def on_raw_reaction_add(payload):
             channel = bot.get_channel(payload.channel_id)
             message = await channel.fetch_message(payload.message_id)
             user = await bot.fetch_user(payload.user_id)
+            
+            # 統計記録（ユーザーアクティビティ）
+            await stats_manager.record_user_activity(str(payload.user_id), bot)
             
             logger.info(f"{payload.emoji.name} リアクションを検知しました！")
             logger.info(f"サーバー: {message.guild.name}")
@@ -1898,6 +2059,7 @@ async def on_message(message):
     
     # コマンドの処理を継続
     await bot.process_commands(message)
+
 
 
 if __name__ == "__main__":

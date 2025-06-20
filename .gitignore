@@ -23,6 +23,9 @@ data/user_data/*.json
 # サーバーデータ（設定情報）
 data/server_data/*.json
 
+# アクティビティログ（統計データ - プライバシー保護）
+data/activity_logs/*.json
+
 # Pythonキャッシュファイル
 __pycache__/
 *.pyc
