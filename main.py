@@ -835,7 +835,18 @@ async def transcribe_audio(message, channel, reaction_user):
                 await channel.send("⚠️ 文字起こし結果が空でした。")
             
             await channel.send("-" * 30)
-            await channel.send("📄 文字起こし結果のテキストファイルです！", file=discord.File(transcript_path))
+            file_message = await channel.send("📄 文字起こし結果のテキストファイルです！", file=discord.File(transcript_path))
+            
+            # 文字起こし結果ファイルに自動でリアクションを追加
+            reactions = ['👍', '❓', '❤️', '✏️', '📝']
+            for reaction in reactions:
+                try:
+                    await file_message.add_reaction(reaction)
+                    await asyncio.sleep(0.5)  # Discord API レート制限対策
+                except Exception as e:
+                    logger.warning(f"リアクション追加エラー ({reaction}): {e}")
+            
+            logger.info("文字起こし結果ファイルにリアクションを追加しました")
             
     except Exception as e:
         logger.error(f"音声文字起こしエラー: {e}")
@@ -1821,7 +1832,18 @@ async def on_raw_reaction_add(payload):
                                     file_data = f.read()
                                 
                                 file_obj = io.BytesIO(file_data)
-                                await channel.send("📝 メモファイルを作成しました！", file=discord.File(file_obj, filename=filename))
+                                file_message = await channel.send("📝 メモファイルを作成しました！", file=discord.File(file_obj, filename=filename))
+                                
+                                # メモファイルに自動でリアクションを追加
+                                reactions = ['👍', '❓', '❤️', '✏️', '📝']
+                                for reaction in reactions:
+                                    try:
+                                        await file_message.add_reaction(reaction)
+                                        await asyncio.sleep(0.5)  # Discord API レート制限対策
+                                    except Exception as e:
+                                        logger.warning(f"リアクション追加エラー ({reaction}): {e}")
+                                
+                                logger.info("メモファイルにリアクションを追加しました")
                                 
                                 # Discord投稿後、attachmentsフォルダの中身を削除
                                 for attachment_file in attachments_dir.iterdir():
@@ -1974,7 +1996,18 @@ async def on_raw_reaction_add(payload):
                                     file_data = f.read()
                                 
                                 file_obj = io.BytesIO(file_data)
-                                await channel.send("📝 記事ファイルです！", file=discord.File(file_obj, filename=filename))
+                                file_message = await channel.send("📝 記事ファイルです！", file=discord.File(file_obj, filename=filename))
+                                
+                                # 記事ファイルに自動でリアクションを追加
+                                reactions = ['👍', '❓', '❤️', '✏️', '📝']
+                                for reaction in reactions:
+                                    try:
+                                        await file_message.add_reaction(reaction)
+                                        await asyncio.sleep(0.5)  # Discord API レート制限対策
+                                    except Exception as e:
+                                        logger.warning(f"リアクション追加エラー ({reaction}): {e}")
+                                
+                                logger.info("記事ファイルにリアクションを追加しました")
                                 
                                 # Discord投稿後、attachmentsフォルダの中身を削除
                                 for attachment_file in attachments_dir.iterdir():
