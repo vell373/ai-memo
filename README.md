@@ -10,6 +10,7 @@ Discord上でAI機能を提供するBotです。リアクションベースの�
 - ❤️ **褒めメッセージ**: 投稿やファイル内容を熱烈に褒める画像付きメッセージ
 - ✏️ **メモ作成**: 投稿やテキストファイルをObsidian用Markdownメモとして保存
 - 📝 **記事作成**: メッセージやファイル内容からPREP法に基づく構造化されたMarkdown記事を生成
+- 📊 **統計機能**: リアルタイム統計収集（DAU/MAU/サーバー数）とオーナー専用統計表示
 
 ## 🎯 プラン比較
 
@@ -161,6 +162,8 @@ ai-keisuke/
 ├── ai-keisuke.bat         # Windows起動スクリプト（英語版）
 ├── run.sh                 # macOS/Linux起動スクリプト
 ├── data/                  # データ保存
+│   ├── activity_logs/     # 統計データ（日別）
+│   │   └── .gitkeep      # ディレクトリ保持用
 │   ├── server_data/       # サーバー設定
 │   │   └── .gitkeep      # ディレクトリ保持用
 │   └── user_data/         # ユーザー設定
@@ -172,6 +175,13 @@ ai-keisuke/
 │   ├── pencil_memo.txt
 │   └── article.txt
 ├── images_homehome/       # 褒め画像背景
+├── tests/                 # テストスイート
+│   ├── test_slash_commands_fixed.py
+│   ├── test_custom_prompts_fixed.py
+│   └── README.md         # テスト説明書
+├── pytest.ini            # テスト設定
+├── test_requirements.txt  # テスト依存関係
+├── run_all_tests.py       # テスト実行スクリプト
 └── attachments/           # 一時ファイル
     └── .gitkeep          # ディレクトリ保持用
 ```
@@ -245,6 +255,7 @@ deactivate
 | `/activate` | 管理者 | チャンネル有効化 |
 | `/deactivate` | 管理者 | チャンネル無効化 |
 | `/status` | 管理者 | 有効チャンネル一覧 |
+| `/stats` | オーナー | 統計情報表示（DAU/MAU/サーバー数） |
 | `/set_custom_prompt_x_post` | 全員 | X投稿用カスタムプロンプト設定 |
 | `/set_custom_prompt_article` | 全員 | 記事作成用カスタムプロンプト設定 |
 
@@ -355,6 +366,32 @@ Discord Botの仕様により、日本語ファイル名は自動的に英語に
 - APIキーは`.env`ファイルで管理
 - ユーザーデータは暗号化なしでローカル保存
 - プライベートサーバーでの運用を推奨
+
+## 🧪 テスト実行
+
+### テスト依存関係のインストール
+```bash
+pip install -r test_requirements.txt
+```
+
+### テスト実行方法
+```bash
+# 全テスト実行（推奨）
+python run_all_tests.py
+
+# 個別テスト実行
+python -m pytest tests/test_slash_commands_fixed.py -v
+python -m pytest tests/test_custom_prompts_fixed.py -v
+
+# カバレッジ付きテスト
+python -m pytest --cov=main --cov-report=term-missing tests/
+```
+
+### テスト対象
+- ✅ スラッシュコマンド動作確認
+- ✅ データ保存・読み込み機能
+- ✅ カスタムプロンプト機能
+- ✅ 統計システム基礎機能
 
 ## 📊 制限事項
 
