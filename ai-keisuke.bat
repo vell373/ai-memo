@@ -57,11 +57,16 @@ call ai-keisuke-env\Scripts\activate.bat
 echo [INFO] Checking dependencies...
 pip install -r requirements.txt --quiet
 
-echo [INFO] Starting AI Keisuke Bot...
-echo [INFO] Press Ctrl+C to stop
+echo [INFO] Starting AI Keisuke Bot with auto-restart...
+echo [INFO] Press Ctrl+C to stop completely
 echo.
+
+:restart_loop
+echo [%date% %time%] Starting AI Keisuke Bot...
 python main.py
 
 echo.
-echo [INFO] Bot has stopped.
-pause
+echo [%date% %time%] Bot has stopped - Restarting in 3 seconds...
+echo [INFO] Press Ctrl+C now to stop, or wait for automatic restart...
+timeout /t 3
+goto restart_loop
