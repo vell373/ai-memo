@@ -1328,6 +1328,40 @@ async def stats_command(interaction: discord.Interaction):
         logger.error(f"統計コマンドエラー: {e}")
         await interaction.response.send_message("❌ 統計取得中にエラーが発生しました。", ephemeral=True)
 
+@bot.tree.command(name="restart", description="Botを再起動します（オーナー専用）")
+async def restart_command(interaction: discord.Interaction):
+    """Botリスタートコマンド（オーナー専用）"""
+    # オーナー権限チェック
+    user_id = str(interaction.user.id)
+    
+    # settings.jsonからowner_user_idを取得
+    settings_path = script_dir / "settings.json"
+    if settings_path.exists():
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+            owner_user_id = settings.get("owner_user_id")
+    else:
+        owner_user_id = None
+    
+    # オーナーかどうかチェック
+    if not owner_user_id or user_id != str(owner_user_id):
+        await interaction.response.send_message("❌ このコマンドはオーナーのみ使用できます。", ephemeral=True)
+        return
+    
+    try:
+        # 再起動メッセージを送信
+        await interaction.response.send_message("🔄 Botを再起動しています...", ephemeral=True)
+        
+        # ログに記録
+        logger.info(f"Bot再起動要求 - ユーザー: {interaction.user.name} ({user_id})")
+        
+        # Bot終了（プロセスマネージャーがあれば自動再起動、なければ手動再起動が必要）
+        await bot.close()
+        
+    except Exception as e:
+        logger.error(f"再起動コマンドエラー: {e}")
+        await interaction.followup.send("❌ 再起動中にエラーが発生しました。", ephemeral=True)
+
 @bot.event
 async def on_raw_reaction_add(payload):
     """リアクション追加時の処理"""
