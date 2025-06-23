@@ -313,6 +313,22 @@ def migrate_user_data(user_data, user_id, username):
     
     return user_data, updated
 
+async def check_content_for_urls(content_text, user, channel):
+    """コンテンツ内のURLを検出し、必要に応じて警告を表示"""
+    import re
+    url_pattern = r'https?://[^\s]+'
+    urls = re.findall(url_pattern, content_text) if content_text else []
+    
+    if urls:
+        warning_msg = (
+            f"{user.mention} ⚠️ URLが含まれたコンテンツを検出しました\n"
+            f"📝 URLの中身は読み取ることができませんが、このまま処理を続行します\n"
+            f"🔗 検出されたURL: {len(urls)}個"
+        )
+        await channel.send(warning_msg)
+    
+    return content_text
+
 def load_user_data(user_id):
     """ユーザーデータを読み込む"""
     file_path = script_dir / "data" / "user_data" / f"{user_id}.json"
@@ -1381,6 +1397,7 @@ async def on_raw_reaction_add(payload):
             # 使用回数更新
             save_user_data(user.id, user_data)
             
+            
             # 👍 サムズアップ：X投稿要約
             if payload.emoji.name == '👍':
                 # メッセージ内容または添付ファイル、Embedからテキストを取得
@@ -1407,6 +1424,9 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # URL検出・警告
+                    await check_content_for_urls(input_text, user, channel)
+                    
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
@@ -1492,7 +1512,12 @@ async def on_raw_reaction_add(payload):
                         logger.error("エラー: OpenAI APIキーが設定されていません")
                         await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ **X投稿を作成するためにはテキストが必要です**\n\n"
+                                     f"以下のいずれかを行ってから👍リアクションしてください：\n"
+                                     f"• テキストメッセージを投稿する\n"
+                                     f"• テキストファイル（.txt）を添付する\n"
+                                     f"• 音声ファイルの場合は🎤で文字起こしをしてからそのファイルに👍する\n\n"
+                                     f"音声ファイルのみでは直接X投稿は作成できません。")
             
             # 🎤 マイク：音声・動画文字起こし
             elif payload.emoji.name == '🎤':
@@ -1500,7 +1525,13 @@ async def on_raw_reaction_add(payload):
                 if message.attachments:
                     await transcribe_audio(message, channel, user)
                 else:
-                    await channel.send(f"{user.mention} ⚠️ 音声・動画ファイルが添付されたメッセージにリアクションしてください。")
+                    await channel.send(f"{user.mention} ⚠️ **🎤は音声・動画の文字起こし専用です**\n\n"
+                                     f"音声ファイル（mp3、wav、m4a等）または動画ファイル（mp4、mov等）が添付されたメッセージにリアクションしてください。\n\n"
+                                     f"テキストのみのメッセージには🎤ではなく、以下のリアクションをお使いください：\n"
+                                     f"• 👍 X投稿作成\n"
+                                     f"• ❓ AI解説\n"
+                                     f"• ❤️ 絶賛モード\n"
+                                     f"• ✏️ 記事作成")
             
             # ❤️ ハート：絶賛モード
             elif payload.emoji.name == '❤️':
@@ -1528,6 +1559,9 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # URL検出・警告
+                    await check_content_for_urls(input_text, user, channel)
+                    
                     # 処理開始メッセージを送信
                     message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
                     await channel.send(f"{user.mention} わー！褒めさせて〜！ちょっと待っててね✨\n📎 元メッセージ: {message_link}")
@@ -1613,7 +1647,12 @@ async def on_raw_reaction_add(payload):
                         logger.error("エラー: OpenAI APIキーが設定されていません")
                         await channel.send(f"{user.mention} ❌ エラーが発生しました。管理者にお問い合わせください。")
                 else:
-                    await channel.send(f"{user.mention} ⚠️ メッセージに内容がありません。")
+                    await channel.send(f"{user.mention} ⚠️ **❤️褒めメッセージを作成するためにはテキストが必要です**\n\n"
+                                     f"以下のいずれかを行ってから❤️リアクションしてください：\n"
+                                     f"• テキストメッセージを投稿する\n"
+                                     f"• テキストファイル（.txt）を添付する\n"
+                                     f"• 音声ファイルの場合は🎤で文字起こしをしてからそのファイルに❤️する\n\n"
+                                     f"あなたの投稿内容を元に素敵な褒めメッセージと画像を生成します！")
             
             # ❓ 疑問符：AI説明
             elif payload.emoji.name == '❓':
@@ -1641,6 +1680,9 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # URL検出・警告
+                    await check_content_for_urls(input_text, user, channel)
+                    
                     # モデルを選択
                     model = PREMIUM_USER_MODEL if is_premium else FREE_USER_MODEL
                     
@@ -1731,6 +1773,9 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # URL検出・警告
+                    await check_content_for_urls(input_text, user, channel)
+                    
                     # 処理開始メッセージ
                     message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
                     await channel.send(f"{user.mention} 📝 メモを作るよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
@@ -1896,6 +1941,9 @@ async def on_raw_reaction_add(payload):
                             logger.info(f"添付ファイルの内容を追加: {attachment.filename}")
                 
                 if input_text:
+                    # URL検出・警告
+                    await check_content_for_urls(input_text, user, channel)
+                    
                     # 処理開始メッセージ
                     message_link = f"https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id}"
                     await channel.send(f"{user.mention} 📝 記事を作成するよ〜！ちょっと待っててね\n📎 元メッセージ: {message_link}")
