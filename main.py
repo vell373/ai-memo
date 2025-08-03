@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import json
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -46,17 +47,30 @@ if 'DISCORD_BOT_TOKEN' in os.environ:
 
 load_dotenv(env_path, override=True)
 
-# 環境変数からトークンを取得
+# 環境変数からトークンとモデル設定を取得
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# OpenAIモデル設定
-FREE_USER_MODEL = "gpt-4.1-mini"
-PREMIUM_USER_MODEL = "gpt-4.1"
+# 必要な環境変数が設定されているか確認
+if not TOKEN or not OPENAI_API_KEY:
+    logger.error("環境変数が設定されていません: DISCORD_BOT_TOKENまたはOPENAI_API_KEYが必要です")
+    sys.exit(1)
+
+# OpenAIモデル設定（環境変数から取得、設定がない場合はエラーを出す）
+FREE_USER_MODEL = os.getenv('FREE_USER_MODEL')
+PREMIUM_USER_MODEL = os.getenv('PREMIUM_USER_MODEL')
+
+# モデル設定があるか確認
+if not FREE_USER_MODEL or not PREMIUM_USER_MODEL:
+    logger.error("環境変数が設定されていません: FREE_USER_MODELおよびPREMIUM_USER_MODELが必要です")
+    sys.exit(1)
+
+# モデル設定をログに記録
+logger.info(f"使用モデル設定: FREE={FREE_USER_MODEL}, PREMIUM={PREMIUM_USER_MODEL}")
 
 # テストサーバーID（スラッシュコマンドの即座反映用）
 # Botが参加しているサーバーのIDに変更してください
-TEST_GUILD_ID = 1383696841450721442  # Botがこのサーバーに招待されている必要があります
+TEST_GUILD_ID = 1388155815730610187  # Botがこのサーバーに招待されている必要があります
 
 # settings.jsonから設定を読み込む
 settings_path = script_dir / "settings.json"
