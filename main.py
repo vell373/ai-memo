@@ -47,6 +47,16 @@ if 'DISCORD_BOT_TOKEN' in os.environ:
 
 load_dotenv(env_path, override=True)
 
+# ログ設定（環境変数チェック前に初期化）
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # コンソールに出力
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # 環境変数からトークンとモデル設定を取得
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -124,19 +134,11 @@ class SyncFriendlyFileHandler(logging.Handler):
         except Exception as e:
             print(f"ログローテーションエラー: {e}")
 
-# ログ設定（同期フレンドリー）
+# ファイルログハンドラーを追加（コンソールログは既に設定済み）
 log_file = script_dir / "log.txt"
 sync_handler = SyncFriendlyFileHandler(log_file)
 sync_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[
-        sync_handler,
-        logging.StreamHandler()  # コンソールにも出力
-    ]
-)
-logger = logging.getLogger(__name__)
+logger.addHandler(sync_handler)
 
 # 統計管理クラス
 class StatsManager:
