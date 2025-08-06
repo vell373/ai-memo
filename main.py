@@ -36,18 +36,7 @@ def create_required_directories():
         dir_path.mkdir(parents=True, exist_ok=True)
         print(f"📁 ディレクトリ確認: {dir_path}")
 
-# 必要なディレクトリを作成
-create_required_directories()
-
-# 既存の環境変数をクリアしてから.envファイルを読み込む
-if 'OPENAI_API_KEY' in os.environ:
-    del os.environ['OPENAI_API_KEY']
-if 'DISCORD_BOT_TOKEN' in os.environ:
-    del os.environ['DISCORD_BOT_TOKEN']
-
-load_dotenv(env_path, override=True)
-
-# ログ設定（環境変数チェック前に初期化）
+# ログ設定（最初に初期化）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -57,23 +46,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 必要なディレクトリを作成
+create_required_directories()
+
+# .envファイルがある場合のみ読み込み（Railwayでは環境変数を直接設定）
+if env_path.exists():
+    logger.info(f".envファイルを読み込みます: {env_path}")
+    load_dotenv(env_path, override=False)  # Railwayの環境変数を上書きしない
+else:
+    logger.info(".envファイルが見つかりません。Railwayの環境変数を使用します。")
+
 # 環境変数からトークンとモデル設定を取得
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+FREE_USER_MODEL = os.getenv('FREE_USER_MODEL', 'gpt-4.1-mini')  # 一時的なデフォルト値
+PREMIUM_USER_MODEL = os.getenv('PREMIUM_USER_MODEL', 'gpt-4.1')  # 一時的なデフォルト値
+
+# デバッグ: 環境変数の状態をログ出力
+logger.info("=== 環境変数チェック ===")
+
+# すべての環境変数を表示（デバッグ用）
+logger.info("全環境変数:")
+for key, value in sorted(os.environ.items()):
+    if any(keyword in key.upper() for keyword in ['TOKEN', 'KEY', 'MODEL', 'API']):
+        logger.info(f"  {key}: {'SET' if value else 'NOT SET'} (length: {len(value) if value else 0})")
+
+logger.info(f"DISCORD_BOT_TOKEN: {'SET' if TOKEN else 'NOT SET'} (length: {len(TOKEN) if TOKEN else 0})")
+logger.info(f"OPENAI_API_KEY: {'SET' if OPENAI_API_KEY else 'NOT SET'} (length: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0})")
+logger.info(f"FREE_USER_MODEL: {'SET' if FREE_USER_MODEL else 'NOT SET'} (value: {FREE_USER_MODEL})")
+logger.info(f"PREMIUM_USER_MODEL: {'SET' if PREMIUM_USER_MODEL else 'NOT SET'} (value: {PREMIUM_USER_MODEL})")
+logger.info("=============================")
 
 # 必要な環境変数が設定されているか確認
-if not TOKEN or not OPENAI_API_KEY:
-    logger.error("環境変数が設定されていません: DISCORD_BOT_TOKENまたはOPENAI_API_KEYが必要です")
+if not TOKEN:
+    logger.error("❗ DISCORD_BOT_TOKENが設定されていません")
     sys.exit(1)
 
-# OpenAIモデル設定（環境変数から取得、設定がない場合はエラーを出す）
-FREE_USER_MODEL = os.getenv('FREE_USER_MODEL')
-PREMIUM_USER_MODEL = os.getenv('PREMIUM_USER_MODEL')
-
-# モデル設定があるか確認
-if not FREE_USER_MODEL or not PREMIUM_USER_MODEL:
-    logger.error("環境変数が設定されていません: FREE_USER_MODELおよびPREMIUM_USER_MODELが必要です")
+if not OPENAI_API_KEY:
+    logger.error("❗ OPENAI_API_KEYが設定されていません")
     sys.exit(1)
+
+# モデル設定はデフォルト値があるためチェックをスキップ
+
+logger.info("✅ すべての必要な環境変数が設定されています")
 
 # モデル設定をログに記録
 logger.info(f"使用モデル設定: FREE={FREE_USER_MODEL}, PREMIUM={PREMIUM_USER_MODEL}")
